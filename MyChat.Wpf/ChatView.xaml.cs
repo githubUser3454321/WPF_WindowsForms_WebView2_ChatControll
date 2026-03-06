@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Diagnostics;
 using MyChat.Abstractions;
 using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
@@ -109,13 +110,16 @@ public partial class ChatView
             bubbleContent.Children.Add(new Separator { Margin = new Thickness(0, 8, 0, 6) });
             foreach (var attachment in message.Attachments)
             {
-                bubbleContent.Children.Add(new Button
+                var attachmentButton = new Button
                 {
                     Content = $"📎 {attachment}",
                     HorizontalAlignment = HorizontalAlignment.Left,
                     Margin = new Thickness(0, 0, 0, 4),
                     Padding = new Thickness(8, 3, 8, 3)
-                });
+                };
+
+                attachmentButton.Click += (_, _) => OpenAttachment(attachment);
+                bubbleContent.Children.Add(attachmentButton);
             }
         }
 
@@ -306,6 +310,38 @@ public partial class ChatView
         }
 
         return start;
+    }
+
+    private static void OpenAttachment(string attachment)
+    {
+        if (string.IsNullOrWhiteSpace(attachment))
+        {
+            return;
+        }
+
+        try
+        {
+            if (Uri.TryCreate(attachment, UriKind.Absolute, out var attachmentUri)
+                && (attachmentUri.Scheme == Uri.UriSchemeHttp
+                    || attachmentUri.Scheme == Uri.UriSchemeHttps
+                    || attachmentUri.Scheme == Uri.UriSchemeFile))
+            {
+                Process.Start(new ProcessStartInfo(attachmentUri.AbsoluteUri) { UseShellExecute = true });
+                return;
+            }
+
+            if (File.Exists(attachment))
+            {
+                Process.Start(new ProcessStartInfo(attachment) { UseShellExecute = true });
+                return;
+            }
+
+            MessageBox.Show($"Anhang ausgewählt: {attachment}", "Anhang", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Anhang kann nicht geöffnet werden: {ex.Message}", "Fehler", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void UpdateMentionPopup()

@@ -85,8 +85,13 @@
         attachments.forEach((fileName) => {
           const attachmentLink = document.createElement('a');
           attachmentLink.href = '#';
+          attachmentLink.dataset.attachment = fileName;
           attachmentLink.className = 'attachment-link';
           attachmentLink.textContent = `📎 ${fileName}`;
+          attachmentLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            openAttachment(fileName);
+          });
           attachmentList.appendChild(attachmentLink);
         });
         bubble.appendChild(attachmentList);
@@ -96,6 +101,20 @@
       row.appendChild(bubble);
       ui.messages.appendChild(row);
       ui.messages.scrollTop = ui.messages.scrollHeight;
+    }
+
+
+    function openAttachment(attachment) {
+      if (!attachment) return;
+      if (window.chrome?.webview?.hostObjects?.chatBridge?.OpenAttachment) {
+        window.chrome.webview.hostObjects.chatBridge.OpenAttachment(attachment);
+        return;
+      }
+
+      const opened = window.open(attachment, '_blank');
+      if (!opened) {
+        alert(`Anhang ausgewählt: ${attachment}`);
+      }
     }
 
     function getRawInputText() {
