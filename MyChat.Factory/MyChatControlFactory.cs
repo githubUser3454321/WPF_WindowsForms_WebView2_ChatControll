@@ -1,5 +1,4 @@
 using System.Windows.Forms;
-using Microsoft.Web.WebView2.WinForms;
 using MyChat.Abstractions;
 using MyChat.WebView;
 using MyChat.WinForms;
@@ -9,9 +8,9 @@ namespace MyChat.Factory;
 
 public static class MyChatControlFactory
 {
-    public static void UseCustomWebView2Component<TWebView2>() where TWebView2 : WebView2, new()
+    public static void UseCustomWebView2Component<TWebView2>() where TWebView2 : Control, new()
     {
-        MyChatWebViewControl.UseWebViewFactory<TWebView2>();
+        MyChatWebViewControl.UseWebViewFactory(static () => new TWebView2());
     }
 
     public static void ResetCustomWebView2Component()
