@@ -51,4 +51,4 @@ MyChatControlFactory.ResetCustomWebView2Component();
 ## Hinweise
 
 - Für `MyChat.WebView` wird das NuGet-Paket `Microsoft.Web.WebView2` benötigt.
-- Das Demo-Form erlaubt den direkten Technologie-Wechsel per ComboBox.
+- Das Demo-Form erlaubt den direkten Technologie-Wechsel über drei Checkboxen (WinForms, WPF, WebView2) sowie das Hinzufügen von Nachrichten über zwei Eingabefelder und Buttons ("from me" / "from someone else").
