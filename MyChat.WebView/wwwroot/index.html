@@ -106,14 +106,64 @@
       return getRawInputText().trim();
     }
 
-    function getTextBeforeCaret() {
+    function escapeHtmlWithSpaces(text) {
+      return escapeHtml(text).replaceAll(' ', '&nbsp;');
+    }
+
+    function buildMentionHtml(text) {
+      const escaped = escapeHtmlWithSpaces(text).replace(/\r/g, '').replace(/\n/g, '<br>');
+      return escaped.replace(/(^|\s)(@[\p{L}\p{N}_-]+)/gu, (match, prefix, mention) => `${prefix}<span class="mention">${mention}</span>`);
+    }
+
+    function getCaretOffset() {
       const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return getRawInputText();
+      if (!selection || selection.rangeCount === 0) return getRawInputText().length;
 
       const range = selection.getRangeAt(0).cloneRange();
       range.selectNodeContents(ui.input);
       range.setEnd(selection.anchorNode, selection.anchorOffset);
-      return range.toString().replace(/\u00a0/g, ' ').replace(/\r/g, '');
+      return range.toString().replace(/\u00a0/g, ' ').replace(/\r/g, '').length;
+    }
+
+    function setCaretOffset(offset) {
+      const selection = window.getSelection();
+      if (!selection) return;
+
+      const range = document.createRange();
+      let remaining = Math.max(0, offset);
+      const walker = document.createTreeWalker(ui.input, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+
+      while (node) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining <= length) {
+          range.setStart(node, remaining);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return;
+        }
+
+        remaining -= length;
+        node = walker.nextNode();
+      }
+
+      range.selectNodeContents(ui.input);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function applyMentionStyling(caretOffset = null) {
+      const text = getRawInputText();
+      const targetOffset = caretOffset ?? getCaretOffset();
+      ui.input.innerHTML = buildMentionHtml(text);
+      setCaretOffset(Math.min(targetOffset, text.length));
+    }
+
+    function getTextBeforeCaret() {
+      const text = getRawInputText();
+      return text.slice(0, getCaretOffset());
     }
 
     function notifyHost(type, payload = {}) {
@@ -195,7 +245,9 @@
       let end = mentionState.atIndex + 1;
       while (end < text.length && !/\s/.test(text[end])) end++;
       const replacement = `@${mentionState.matches[mentionState.selected]} `;
-      ui.input.innerText = text.slice(0, mentionState.atIndex) + replacement + text.slice(end);
+      const nextText = text.slice(0, mentionState.atIndex) + replacement + text.slice(end);
+      ui.input.innerText = nextText;
+      applyMentionStyling(mentionState.atIndex + replacement.length);
       ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
       closeMentionPopup();
     }
@@ -231,6 +283,7 @@
     });
 
     ui.input.addEventListener('input', () => {
+      applyMentionStyling();
       ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
       updateMentionPopup();
     });
