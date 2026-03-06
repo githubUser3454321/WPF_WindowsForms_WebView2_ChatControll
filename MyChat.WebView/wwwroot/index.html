@@ -1,336 +1,525 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MyChat WebView</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: #f5f7fb; }
-    #root { display: grid; grid-template-rows: 32px 1fr auto; height: 100vh; }
-    #header { background: #244179; color: #fff; display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-weight: 600; }
-    #messages { overflow: auto; padding: 12px; background: #f5f7fb; display: flex; flex-direction: column; gap: 12px; }
-    .message-item { max-width: min(72%, 640px); min-height: 24px; display: flex; flex-direction: column; }
-    .message-item.incoming { align-self: flex-start; }
-    .message-item.outgoing { align-self: flex-end; }
-    .message-meta { font-size: 12px; color: #4d5867; margin-bottom: 6px; font-weight: 600; }
-    .message-bubble { border: 1px solid #c8d2e2; background: #fff; border-radius: 8px; padding: 10px 12px; color: #22272e; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
-    .message-item.outgoing .message-bubble { background: #dceeff; }
-    .attachment-list { margin-top: 8px; padding-top: 8px; border-top: 1px solid #d8e0ec; display: flex; flex-direction: column; gap: 6px; }
-    .attachment-link { text-decoration: none; color: #244179; border: 1px solid #c8d2e2; border-radius: 6px; padding: 6px 8px; background: #ffffffc7; font-size: 12px; }
-    #inputBar { display: grid; grid-template-columns: 1fr 42px 90px; gap: 6px; padding: 8px 12px; background: #fff; border-top: 1px solid #dce2ea; position: relative; }
-    #input { border: 1px solid #c8d2e2; border-radius: 6px; padding: 8px 10px; font-size: 14px; min-height: 34px; max-height: 74px; overflow: auto; background: white; }
-    #input[contenteditable=true]:empty:before { content: attr(data-placeholder); color: #7f8ba1; }
-    #input:focus { outline: 2px solid #88a6d8; border-color: #88a6d8; }
-    .mention { color: #2563eb; }
-    #mentionPopup { position: absolute; left: 14px; bottom: 48px; width: 180px; border: 1px solid #c8d2e2; border-radius: 6px; background: white; display: none; z-index: 5; }
-    #mentionPopup button { width: 100%; border: 0; background: white; text-align: left; padding: 7px 9px; cursor: pointer; }
-    #mentionPopup button.active { background: #e9f0ff; }
-    #send { border: 0; border-radius: 6px; background: #244179; color: white; font-weight: 700; cursor: pointer; }
-    #send:hover { background: #1e3665; }
-    #send:disabled { background: #a7b7d3; cursor: not-allowed; }
-  </style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyChat WebView</title>
+    <style>
+    :root {
+        --font-family: Segoe UI, Arial, sans-serif;
+        --font-family-bold: Segoe UI, Arial, sans-serif;
+
+        --back-color-window: #f5f7fb;
+        --back-color-controls: #ffffff;
+        --back-color-menu: #244179;
+
+        --fore-color-accent: #244179;
+        --fore-color-neutral: #22272e;
+        --grid-separator-color: #dce2ea;
+        --disabled-fore-color: #8a94a3;
+        --hyperlink-fore-color: #244179;
+
+        --button-hover-back-color: #e8eef8;
+        --button-pressed-back-color: #dce7f7;
+
+        --message-outgoing-back-color: #dceeff;
+        --message-bubble-back-color: #ffffff;
+        --message-border-color: #c8d2e2;
+        --message-meta-color: #4d5867;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    html, body {
+        margin: 0;
+        height: 100%;
+        font-family: var(--font-family);
+        background: var(--back-color-window);
+        color: var(--fore-color-neutral);
+    }
+
+    #root {
+        display: grid;
+        grid-template-rows: 32px minmax(0, 1fr) auto;
+        height: 100vh;
+    }
+
+    #header {
+        background: var(--back-color-menu);
+        color: var(--grid-header-fore-color, #fff);
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        font-size: 13px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--grid-separator-color);
+    }
+
+    #messages {
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 12px;
+        background: var(--back-color-window);
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .message-item {
+        max-width: 72%;
+        display: flex;
+        flex-direction: column;
+        align-self: flex-start;
+        margin-bottom: 12px;
+        flex: 0 0 auto;
+    }
+
+    .message-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .message-item.incoming {
+        align-self: flex-start;
+    }
+
+    .message-item.outgoing {
+        align-self: flex-end;
+    }
+
+    .message-meta {
+        font-size: 12px;
+        color: var(--message-meta-color);
+        margin-bottom: 6px;
+        font-weight: 600;
+        font-family: var(--font-family-bold);
+    }
+
+    .message-bubble {
+        border: 1px solid var(--message-border-color);
+        background: var(--message-bubble-back-color);
+        border-radius: 8px;
+        padding: 10px 12px;
+        color: var(--fore-color-neutral);
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        display: block;
+    }
+
+    .message-item.outgoing .message-bubble {
+        background: var(--message-outgoing-back-color);
+    }
+
+    .attachment-link {
+        text-decoration: none;
+        color: var(--hyperlink-fore-color);
+        border: 1px solid var(--message-border-color);
+        border-radius: 6px;
+        padding: 6px 8px;
+        background: color-mix(in srgb, var(--back-color-controls) 78%, transparent);
+        font-size: 12px;
+    }
+
+    #inputBar {
+        display: grid;
+        grid-template-columns: 1fr 42px 90px;
+        gap: 6px;
+        padding: 8px 12px;
+        background: var(--back-color-controls);
+        border-top: 1px solid var(--grid-separator-color);
+        position: relative;
+    }
+
+    #input {
+        border: 1px solid var(--message-border-color);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 14px;
+        min-height: 34px;
+        max-height: 74px;
+        overflow: auto;
+        background: var(--back-color-controls);
+        color: var(--fore-color-neutral);
+    }
+
+    #send, #reload {
+        border: 1px solid var(--message-border-color);
+        background: var(--text-button-back-color, var(--back-color-controls));
+        color: var(--fore-color-neutral);
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    #send:hover, #reload:hover {
+        background: var(--button-hover-back-color);
+    }
+
+    #send:active, #reload:active {
+        background: var(--button-pressed-back-color);
+    }
+
+    #send:disabled {
+        color: var(--disabled-fore-color);
+        background: var(--text-button-disabled-back-color, var(--back-color-controls));
+        cursor: default;
+    }
+
+    .mention {
+        color: var(--fore-color-accent);
+        font-family: var(--font-family-bold);
+    }
+</style>
 </head>
 <body>
-  <div id="root">
-    <div id="header">Chat (WebView2)</div>
-    <div id="messages"></div>
-    <div id="inputBar">
-      <div id="input" contenteditable="true" data-placeholder="Nachricht ..."></div>
-      <div id="mentionPopup"></div>
-      <button id="send">➤</button>
-      <button id="reload">Reload</button>
+    <div id="root">
+        <div id="header">Chat (WebView2)</div>
+        <div id="messages"></div>
+        <div id="inputBar">
+            <div id="input" contenteditable="true" data-placeholder="Nachricht ..."></div>
+            <div id="mentionPopup"></div>
+            <button id="send">➤</button>
+            <button id="reload">V1 </button>
+        </div>
     </div>
-  </div>
 
-  <script>
-    const mentionCandidates = ['Support', 'Ich'];
-    const ui = {
-      header: document.getElementById('header'),
-      messages: document.getElementById('messages'),
-      send: document.getElementById('send'),
-      reload: document.getElementById('reload'),
-      input: document.getElementById('input'),
-      mentionPopup: document.getElementById('mentionPopup')
-    };
+    <script>
+        const mentionCandidates = ['Support', 'Ich'];
+        const ui = {
+            header: document.getElementById('header'),
+            messages: document.getElementById('messages'),
+            send: document.getElementById('send'),
+            reload: document.getElementById('reload'),
+            input: document.getElementById('input'),
+            mentionPopup: document.getElementById('mentionPopup')
+        };
 
-    let model = null;
-    let pendingAttachments = [];
-    let mentionState = null;
+        let model = null;
+        let pendingAttachments = [];
+        let mentionState = null;
 
-    function escapeHtml(t) { return t.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
+        function escapeHtml(t) { return t.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
 
-    function isOwnMessage(sender) {
-      if (!sender) return false;
-      if (sender.toLowerCase() === 'ich') return true;
-      return !!model?.currentUser && sender.toLowerCase() === model.currentUser.toLowerCase();
-    }
+        function isOwnMessage(sender) {
+            if (!sender) return false;
+            if (sender.toLowerCase() === 'ich') return true;
+            return !!model?.currentUser && sender.toLowerCase() === model.currentUser.toLowerCase();
+        }
 
-    function appendMessage(sender, text, timestamp, attachments = []) {
-      const outgoing = isOwnMessage(sender);
-      const row = document.createElement('div');
-      row.className = `message-item ${outgoing ? 'outgoing' : 'incoming'}`;
+        function appendMessage(sender, text, timestamp, attachments = []) {
+            const outgoing = isOwnMessage(sender);
+            const row = document.createElement('div');
+            row.className = `message-item ${outgoing ? 'outgoing' : 'incoming'}`;
 
-      const meta = document.createElement('div');
-      meta.className = 'message-meta';
-      meta.textContent = `${outgoing ? 'Ich' : sender} · ${timestamp}`;
+            const meta = document.createElement('div');
+            meta.className = 'message-meta';
+            meta.textContent = `${outgoing ? 'Ich' : sender} · ${timestamp}`;
 
-      const bubble = document.createElement('div');
-      bubble.className = 'message-bubble';
-      bubble.textContent = text;
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.textContent = text;
 
-      if (attachments.length) {
-        const attachmentList = document.createElement('div');
-        attachmentList.className = 'attachment-list';
-        attachments.forEach((fileName) => {
-          const attachmentLink = document.createElement('a');
-          attachmentLink.href = '#';
-          attachmentLink.dataset.attachment = fileName;
-          attachmentLink.className = 'attachment-link';
-          attachmentLink.textContent = `📎 ${fileName}`;
-          attachmentLink.addEventListener('click', (event) => {
-            event.preventDefault();
-            openAttachment(fileName);
-          });
-          attachmentList.appendChild(attachmentLink);
+            if (attachments.length) {
+                const attachmentList = document.createElement('div');
+                attachmentList.className = 'attachment-list';
+                attachments.forEach((fileName) => {
+                    const attachmentLink = document.createElement('a');
+                    attachmentLink.href = '#';
+                    attachmentLink.dataset.attachment = fileName;
+                    attachmentLink.className = 'attachment-link';
+                    attachmentLink.textContent = `📎 ${fileName}`;
+                    attachmentLink.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        openAttachment(fileName);
+                    });
+                    attachmentList.appendChild(attachmentLink);
+                });
+                bubble.appendChild(attachmentList);
+            }
+
+            row.appendChild(meta);
+            row.appendChild(bubble);
+            ui.messages.appendChild(row);
+            ui.messages.scrollTop = ui.messages.scrollHeight;
+        }
+
+
+        function openAttachment(attachment) {
+            if (!attachment) return;
+            if (window.chrome?.webview?.hostObjects?.chatBridge?.OpenAttachment) {
+                window.chrome.webview.hostObjects.chatBridge.OpenAttachment(attachment);
+                return;
+            }
+
+            const opened = window.open(attachment, '_blank');
+            if (!opened) {
+                alert(`Anhang ausgewählt: ${attachment}`);
+            }
+        }
+
+        function getRawInputText() {
+            return ui.input.innerText.replace(/\u00a0/g, ' ').replace(/\r/g, '');
+        }
+
+        function getPlainInputText() {
+            return getRawInputText().trim();
+        }
+
+        function escapeHtmlWithSpaces(text) {
+            return escapeHtml(text).replaceAll(' ', '&nbsp;');
+        }
+
+        function buildMentionHtml(text) {
+            const escaped = escapeHtmlWithSpaces(text).replace(/\r/g, '').replace(/\n/g, '<br>');
+            return escaped.replace(/(^|\s)(@[\p{L}\p{N}_-]+)/gu, (match, prefix, mention) => `${prefix}<span class="mention">${mention}</span>`);
+        }
+
+        function getCaretOffset() {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) return getRawInputText().length;
+
+            const range = selection.getRangeAt(0).cloneRange();
+            range.selectNodeContents(ui.input);
+            range.setEnd(selection.anchorNode, selection.anchorOffset);
+            return range.toString().replace(/\u00a0/g, ' ').replace(/\r/g, '').length;
+        }
+
+        function setCaretOffset(offset) {
+            const selection = window.getSelection();
+            if (!selection) return;
+
+            const range = document.createRange();
+            let remaining = Math.max(0, offset);
+            const walker = document.createTreeWalker(ui.input, NodeFilter.SHOW_TEXT);
+            let node = walker.nextNode();
+
+            while (node) {
+                const length = node.textContent?.length ?? 0;
+                if (remaining <= length) {
+                    range.setStart(node, remaining);
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    return;
+                }
+
+                remaining -= length;
+                node = walker.nextNode();
+            }
+
+            range.selectNodeContents(ui.input);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        function applyMentionStyling(caretOffset = null) {
+            const text = getRawInputText();
+            const targetOffset = caretOffset ?? getCaretOffset();
+            ui.input.innerHTML = buildMentionHtml(text);
+            setCaretOffset(Math.min(targetOffset, text.length));
+        }
+
+        function getTextBeforeCaret() {
+            const text = getRawInputText();
+            return text.slice(0, getCaretOffset());
+        }
+
+        function notifyHost(type, payload = {}) {
+            if (window.chrome?.webview?.postMessage) {
+                window.chrome.webview.postMessage({ type, payload });
+                return;
+            }
+
+            if (window.chrome?.webview?.hostObjects?.chatBridge) {
+                if (type === 'reload-requested') {
+                    window.chrome.webview.hostObjects.chatBridge.NotifyReloadRequested();
+                }
+
+                if (type === 'message-submitted') {
+                    window.chrome.webview.hostObjects.chatBridge.SubmitMessage(
+                        payload.sender || 'Ich',
+                        payload.text || '',
+                        payload.attachments || []
+                    );
+                }
+            }
+        }
+
+        function sendCurrent() {
+            const rawText = getRawInputText();
+            const text = rawText.trim();
+            if (!text && pendingAttachments.length === 0) return;
+
+            const timestamp = new Date().toLocaleString('de-DE', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            });
+
+            const sender = model?.currentUser || 'Ich';
+            const attachments = [...pendingAttachments];
+            appendMessage(sender, text, timestamp, attachments);
+            notifyHost('message-submitted', { sender, text, attachments });
+            pendingAttachments = [];
+            ui.input.innerHTML = '';
+            ui.send.disabled = true;
+            closeMentionPopup();
+        }
+
+        function closeMentionPopup() {
+            ui.mentionPopup.style.display = 'none';
+            mentionState = null;
+        }
+
+        function showMentionPopup(atIndex, query) {
+            const matches = mentionCandidates.filter(x => x.toLowerCase().startsWith(query.toLowerCase()));
+            if (!matches.length) { closeMentionPopup(); return; }
+            mentionState = { atIndex, matches, selected: 0 };
+            ui.mentionPopup.innerHTML = matches.map((m, i) => `<button class="${i === 0 ? 'active' : ''}" data-v="${m}">${m}</button>`).join('');
+            ui.mentionPopup.style.display = 'block';
+            [...ui.mentionPopup.querySelectorAll('button')].forEach((b, i) => {
+                b.addEventListener('mouseenter', () => setMentionSelection(i));
+                b.addEventListener('mousedown', (e) => { e.preventDefault(); setMentionSelection(i); commitMention(); });
+            });
+        }
+
+        function setMentionSelection(index) {
+            if (!mentionState) return;
+            mentionState.selected = index;
+            [...ui.mentionPopup.querySelectorAll('button')].forEach((b, i) => b.classList.toggle('active', i === index));
+        }
+
+        function updateMentionPopup() {
+            const beforeCaret = getTextBeforeCaret();
+            const at = beforeCaret.lastIndexOf('@');
+            if (at < 0) { closeMentionPopup(); return; }
+            const query = beforeCaret.slice(at + 1);
+            if (/\s/.test(query)) { closeMentionPopup(); return; }
+            showMentionPopup(at, query);
+        }
+
+        function commitMention() {
+            if (!mentionState) return;
+            const text = getRawInputText();
+            let end = mentionState.atIndex + 1;
+            while (end < text.length && !/\s/.test(text[end])) end++;
+            const replacement = `@${mentionState.matches[mentionState.selected]} `;
+            const nextText = text.slice(0, mentionState.atIndex) + replacement + text.slice(end);
+            ui.input.innerText = nextText;
+            applyMentionStyling(mentionState.atIndex + replacement.length);
+            ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
+            closeMentionPopup();
+        }
+
+        ui.send.addEventListener('click', sendCurrent);
+
+        ui.input.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.key.toLowerCase() === 'v') {
+                pendingAttachments.push(`ClipboardImage_${new Date().toISOString().replaceAll(/[:.-]/g, '').slice(0, 15)}.png`);
+                ui.send.disabled = false;
+                event.preventDefault();
+                return;
+            }
+
+            if (mentionState && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const count = mentionState.matches.length;
+                setMentionSelection((mentionState.selected + delta + count) % count);
+                event.preventDefault();
+                return;
+            }
+
+            if (mentionState && (event.key === 'Enter' || event.key === 'Tab')) {
+                commitMention();
+                event.preventDefault();
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                sendCurrent();
+                event.preventDefault();
+            }
         });
-        bubble.appendChild(attachmentList);
-      }
 
-      row.appendChild(meta);
-      row.appendChild(bubble);
-      ui.messages.appendChild(row);
-      ui.messages.scrollTop = ui.messages.scrollHeight;
-    }
+        ui.input.addEventListener('input', () => {
+            applyMentionStyling();
+            ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
+            updateMentionPopup();
+        });
 
+        ui.reload.addEventListener('click', () => {
+            notifyHost('reload-requested');
+        });
 
-    function openAttachment(attachment) {
-      if (!attachment) return;
-      if (window.chrome?.webview?.hostObjects?.chatBridge?.OpenAttachment) {
-        window.chrome.webview.hostObjects.chatBridge.OpenAttachment(attachment);
-        return;
-      }
+ window.chatInterop = {
+        applyTheme(theme) {
+            if (!theme) return;
 
-      const opened = window.open(attachment, '_blank');
-      if (!opened) {
-        alert(`Anhang ausgewählt: ${attachment}`);
-      }
-    }
+            setCssVar('--font-family', theme.fontFamily);
+            setCssVar('--font-family-bold', theme.fontFamilyBold);
 
-    function getRawInputText() {
-      return ui.input.innerText.replace(/\u00a0/g, ' ').replace(/\r/g, '');
-    }
+            setCssVar('--back-color-controls', theme.backColorControls);
+            setCssVar('--fore-color-accent', theme.foreColorAccent);
+            setCssVar('--fore-color-neutral', theme.foreColorNeutral);
+            setCssVar('--dated-contact-change-banner-fore-color', theme.datedContactChangeBannerForeColor);
+            setCssVar('--dated-contact-change-banner-back-color', theme.datedContactChangeBannerBackColor);
+            setCssVar('--back-color-menu', theme.backColorMenu);
+            setCssVar('--back-color-window', theme.backColorWindow);
+            setCssVar('--grid-selected-row-back-color', theme.gridSelectedRowBackColor);
+            setCssVar('--grid-selected-row-back-color-disabled', theme.gridSelectedRowBackColorDisabled);
+            setCssVar('--grid-sorted-column-back-color', theme.gridSortedColumnBackColor);
+            setCssVar('--grid-separator-color', theme.gridSeparatorColor);
+            setCssVar('--grid-header-fore-color', theme.gridHeaderForeColor);
+            setCssVar('--button-pressed-back-color', theme.buttonPressedBackColor);
+            setCssVar('--button-hover-back-color', theme.buttonHoverBackColor);
+            setCssVar('--text-button-back-color', theme.textButtonBackColor);
+            setCssVar('--disabled-fore-color', theme.disabledForeColor);
+            setCssVar('--text-button-disabled-back-color', theme.textButtonDisabledBackColor);
+            setCssVar('--text-button-disabled-fore-color', theme.textButtonDisabledForeColor);
+            setCssVar('--text-button-active-fore-color', theme.textButtonActiveForeColor);
+            setCssVar('--warning-fore-color', theme.warningForeColor);
+            setCssVar('--warning-back-color', theme.warningBackColor);
+            setCssVar('--yellow-info-back-color', theme.yellowInfoBackColor);
+            setCssVar('--error-back-color', theme.errorBackColor);
+            setCssVar('--error-fore-color', theme.errorForeColor);
+            setCssVar('--success-fore-color', theme.successForeColor);
+            setCssVar('--success-back-color', theme.successBackColor);
+            setCssVar('--hyperlink-fore-color', theme.hyperlinkForeColor);
 
-    function getPlainInputText() {
-      return getRawInputText().trim();
-    }
+            setCssVar('--message-bubble-back-color', theme.backColorControls);
+            setCssVar('--message-outgoing-back-color', theme.gridSelectedRowBackColor);
+            setCssVar('--message-border-color', theme.gridSeparatorColor);
+            setCssVar('--message-meta-color', theme.foreColorNeutral);
+        },
 
-    function escapeHtmlWithSpaces(text) {
-      return escapeHtml(text).replaceAll(' ', '&nbsp;');
-    }
+        applySettings(config) {
+            if (!config) return;
 
-    function buildMentionHtml(text) {
-      const escaped = escapeHtmlWithSpaces(text).replace(/\r/g, '').replace(/\n/g, '<br>');
-      return escaped.replace(/(^|\s)(@[\p{L}\p{N}_-]+)/gu, (match, prefix, mention) => `${prefix}<span class="mention">${mention}</span>`);
-    }
+            if (config.headerHeight) {
+                document.getElementById('root').style.gridTemplateRows = `${config.headerHeight}px 1fr 40px`;
+            }
 
-    function getCaretOffset() {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return getRawInputText().length;
+            if (config.rowHeight) {
+                const style = document.createElement('style');
+                style.innerHTML = `.message-item { min-height: ${config.rowHeight}px; }`;
+                document.head.appendChild(style);
+            }
 
-      const range = selection.getRangeAt(0).cloneRange();
-      range.selectNodeContents(ui.input);
-      range.setEnd(selection.anchorNode, selection.anchorOffset);
-      return range.toString().replace(/\u00a0/g, ' ').replace(/\r/g, '').length;
-    }
+            if (config.model) {
+                model = config.model;
+                ui.header.textContent = `Chat (WebView2) | ${model.objectType}/${model.recordId} | User: ${model.currentUser}`;
+            }
+        },
 
-    function setCaretOffset(offset) {
-      const selection = window.getSelection();
-      if (!selection) return;
-
-      const range = document.createRange();
-      let remaining = Math.max(0, offset);
-      const walker = document.createTreeWalker(ui.input, NodeFilter.SHOW_TEXT);
-      let node = walker.nextNode();
-
-      while (node) {
-        const length = node.textContent?.length ?? 0;
-        if (remaining <= length) {
-          range.setStart(node, remaining);
-          range.collapse(true);
-          selection.removeAllRanges();
-          selection.addRange(range);
-          return;
+        addMessage(payload) {
+            appendMessage(payload.sender, payload.text, payload.time, payload.attachments || []);
         }
-
-        remaining -= length;
-        node = walker.nextNode();
-      }
-
-      range.selectNodeContents(ui.input);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-
-    function applyMentionStyling(caretOffset = null) {
-      const text = getRawInputText();
-      const targetOffset = caretOffset ?? getCaretOffset();
-      ui.input.innerHTML = buildMentionHtml(text);
-      setCaretOffset(Math.min(targetOffset, text.length));
-    }
-
-    function getTextBeforeCaret() {
-      const text = getRawInputText();
-      return text.slice(0, getCaretOffset());
-    }
-
-    function notifyHost(type, payload = {}) {
-      if (window.chrome?.webview?.postMessage) {
-        window.chrome.webview.postMessage({ type, payload });
-        return;
-      }
-
-      if (window.chrome?.webview?.hostObjects?.chatBridge) {
-        if (type === 'reload-requested') {
-          window.chrome.webview.hostObjects.chatBridge.NotifyReloadRequested();
-        }
-
-        if (type === 'message-submitted') {
-          window.chrome.webview.hostObjects.chatBridge.SubmitMessage(
-            payload.sender || 'Ich',
-            payload.text || '',
-            payload.attachments || []
-          );
-        }
-      }
-    }
-
-    function sendCurrent() {
-      const rawText = getRawInputText();
-      const text = rawText.trim();
-      if (!text && pendingAttachments.length === 0) return;
-
-      const timestamp = new Date().toLocaleString('de-DE', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-      });
-
-      const sender = model?.currentUser || 'Ich';
-      const attachments = [...pendingAttachments];
-      appendMessage(sender, text, timestamp, attachments);
-      notifyHost('message-submitted', { sender, text, attachments });
-      pendingAttachments = [];
-      ui.input.innerHTML = '';
-      ui.send.disabled = true;
-      closeMentionPopup();
-    }
-
-    function closeMentionPopup() {
-      ui.mentionPopup.style.display = 'none';
-      mentionState = null;
-    }
-
-    function showMentionPopup(atIndex, query) {
-      const matches = mentionCandidates.filter(x => x.toLowerCase().startsWith(query.toLowerCase()));
-      if (!matches.length) { closeMentionPopup(); return; }
-      mentionState = { atIndex, matches, selected: 0 };
-      ui.mentionPopup.innerHTML = matches.map((m, i) => `<button class="${i===0?'active':''}" data-v="${m}">${m}</button>`).join('');
-      ui.mentionPopup.style.display = 'block';
-      [...ui.mentionPopup.querySelectorAll('button')].forEach((b, i) => {
-        b.addEventListener('mouseenter', () => setMentionSelection(i));
-        b.addEventListener('mousedown', (e) => { e.preventDefault(); setMentionSelection(i); commitMention(); });
-      });
-    }
-
-    function setMentionSelection(index) {
-      if (!mentionState) return;
-      mentionState.selected = index;
-      [...ui.mentionPopup.querySelectorAll('button')].forEach((b, i) => b.classList.toggle('active', i === index));
-    }
-
-    function updateMentionPopup() {
-      const beforeCaret = getTextBeforeCaret();
-      const at = beforeCaret.lastIndexOf('@');
-      if (at < 0) { closeMentionPopup(); return; }
-      const query = beforeCaret.slice(at + 1);
-      if (/\s/.test(query)) { closeMentionPopup(); return; }
-      showMentionPopup(at, query);
-    }
-
-    function commitMention() {
-      if (!mentionState) return;
-      const text = getRawInputText();
-      let end = mentionState.atIndex + 1;
-      while (end < text.length && !/\s/.test(text[end])) end++;
-      const replacement = `@${mentionState.matches[mentionState.selected]} `;
-      const nextText = text.slice(0, mentionState.atIndex) + replacement + text.slice(end);
-      ui.input.innerText = nextText;
-      applyMentionStyling(mentionState.atIndex + replacement.length);
-      ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
-      closeMentionPopup();
-    }
-
-    ui.send.addEventListener('click', sendCurrent);
-
-    ui.input.addEventListener('keydown', (event) => {
-      if (event.ctrlKey && event.key.toLowerCase() === 'v') {
-        pendingAttachments.push(`ClipboardImage_${new Date().toISOString().replaceAll(/[:.-]/g, '').slice(0, 15)}.png`);
-        ui.send.disabled = false;
-        event.preventDefault();
-        return;
-      }
-
-      if (mentionState && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
-        const delta = event.key === 'ArrowDown' ? 1 : -1;
-        const count = mentionState.matches.length;
-        setMentionSelection((mentionState.selected + delta + count) % count);
-        event.preventDefault();
-        return;
-      }
-
-      if (mentionState && (event.key === 'Enter' || event.key === 'Tab')) {
-        commitMention();
-        event.preventDefault();
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        sendCurrent();
-        event.preventDefault();
-      }
-    });
-
-    ui.input.addEventListener('input', () => {
-      applyMentionStyling();
-      ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
-      updateMentionPopup();
-    });
-
-    ui.reload.addEventListener('click', () => {
-      notifyHost('reload-requested');
-    });
-
-    window.chatInterop = {
-      applySettings(config) {
-        if (!config) return;
-        if (config.headerHeight) {
-          document.getElementById('root').style.gridTemplateRows = `${config.headerHeight}px 1fr 40px`;
-        }
-        if (config.rowHeight) {
-          const style = document.createElement('style');
-          style.innerHTML = `.message-item { min-height: ${config.rowHeight}px; }`;
-          document.head.appendChild(style);
-        }
-        if (config.model) {
-          model = config.model;
-          ui.header.textContent = `Chat (WebView2) | ${model.objectType}/${model.recordId} | User: ${model.currentUser}`;
-        }
-      },
-      addMessage(payload) {
-        appendMessage(payload.sender, payload.text, payload.time, payload.attachments || []);
-      }
     };
-  </script>
+		
+		
+    </script>
 </body>
 </html>

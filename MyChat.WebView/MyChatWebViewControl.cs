@@ -58,12 +58,12 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
         {
             _headerHeight = Math.Max(16, value);
             _ = PushSettingsAsync();
-        }
+        } 
     }
 
     [Browsable(true)]
     [DefaultValue(24)]
-    public int RowHeight
+    public int RowHeight 
     {
         get => _rowHeight;
         set
@@ -71,7 +71,7 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
             _rowHeight = Math.Max(16, value);
             _ = PushSettingsAsync();
         }
-    }
+    } 
 
     public ChatBindModel? BoundModel { get; private set; }
 
@@ -107,19 +107,19 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
 
     private async Task InitializeAsync()
     {
-        await _webView.EnsureCoreWebView2Async();
+        await _webView.EnsureCoreWebView2Async(); 
         _webView.CoreWebView2.Settings.IsWebMessageEnabled = true;
         _webView.CoreWebView2.WebMessageReceived += CoreWebView2OnWebMessageReceived;
         _webView.CoreWebView2.AddHostObjectToScript("chatBridge", _bridge);
-
         var indexPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html");
         _webView.CoreWebView2.Navigate(new Uri(indexPath).AbsoluteUri);
-        _webView.CoreWebView2.NavigationCompleted += CoreWebView2OnNavigationCompleted;
-    }
+
+        _webView.CoreWebView2.NavigationCompleted += CoreWebView2OnNavigationCompleted; 
+    } 
 
     private void CoreWebView2OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        JsonNode? messageEnvelope;
+        JsonNode? messageEnvelope; 
         try
         {
             messageEnvelope = JsonNode.Parse(e.WebMessageAsJson);
@@ -213,7 +213,7 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
 
         var js = $"window.chatInterop.addMessage({payload});";
         return _webView.CoreWebView2.ExecuteScriptAsync(js);
-    }
+    } 
 
     [ComVisible(true)]
     public sealed class ScriptBridge
