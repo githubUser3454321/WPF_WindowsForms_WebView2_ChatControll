@@ -116,6 +116,27 @@
       return range.toString().replace(/\u00a0/g, ' ').replace(/\r/g, '');
     }
 
+    function notifyHost(type, payload = {}) {
+      if (window.chrome?.webview?.postMessage) {
+        window.chrome.webview.postMessage({ type, payload });
+        return;
+      }
+
+      if (window.chrome?.webview?.hostObjects?.chatBridge) {
+        if (type === 'reload-requested') {
+          window.chrome.webview.hostObjects.chatBridge.NotifyReloadRequested();
+        }
+
+        if (type === 'message-submitted') {
+          window.chrome.webview.hostObjects.chatBridge.SubmitMessage(
+            payload.sender || 'Ich',
+            payload.text || '',
+            payload.attachments || []
+          );
+        }
+      }
+    }
+
     function sendCurrent() {
       const rawText = getRawInputText();
       const text = rawText.trim();
@@ -127,10 +148,9 @@
       });
 
       const sender = model?.currentUser || 'Ich';
-      appendMessage(sender, text, timestamp, [...pendingAttachments]);
-      if (window.chrome?.webview?.hostObjects?.chatBridge) {
-        window.chrome.webview.hostObjects.chatBridge.SubmitMessage(sender, text, [...pendingAttachments]);
-      }
+      const attachments = [...pendingAttachments];
+      appendMessage(sender, text, timestamp, attachments);
+      notifyHost('message-submitted', { sender, text, attachments });
       pendingAttachments = [];
       ui.input.innerHTML = '';
       ui.send.disabled = true;
@@ -216,9 +236,7 @@
     });
 
     ui.reload.addEventListener('click', () => {
-      if (window.chrome?.webview?.hostObjects?.chatBridge) {
-        window.chrome.webview.hostObjects.chatBridge.NotifyReloadRequested();
-      }
+      notifyHost('reload-requested');
     });
 
     window.chatInterop = {
