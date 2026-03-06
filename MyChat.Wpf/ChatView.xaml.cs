@@ -4,6 +4,10 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using MyChat.Abstractions;
+using Brushes = System.Windows.Media.Brushes;
+using Button = System.Windows.Controls.Button;
+using Color = System.Windows.Media.Color;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
 
 namespace MyChat.Wpf;
 
