@@ -428,8 +428,10 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
                 {
                     AutoSize = true,
                     Text = $"📎 {attachment}",
-                    Location = new Point(0, currentY)
+                    Location = new Point(0, currentY),
+                    Tag = attachment
                 };
+                link.LinkClicked += (_, _) => OpenAttachment(link.Tag as string);
                 card.Controls.Add(link);
                 currentY = link.Bottom + 2;
             }
@@ -439,6 +441,44 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
         wrapper.Height = card.Height;
         wrapper.Controls.Add(card);
         return wrapper;
+    }
+
+    private static void OpenAttachment(string? attachment)
+    {
+        if (string.IsNullOrWhiteSpace(attachment))
+        {
+            return;
+        }
+
+        try
+        {
+            if (Uri.TryCreate(attachment, UriKind.Absolute, out var attachmentUri)
+                && (attachmentUri.Scheme == Uri.UriSchemeHttp
+                    || attachmentUri.Scheme == Uri.UriSchemeHttps
+                    || attachmentUri.Scheme == Uri.UriSchemeFile))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(attachmentUri.AbsoluteUri)
+                {
+                    UseShellExecute = true
+                });
+                return;
+            }
+
+            if (File.Exists(attachment))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(attachment)
+                {
+                    UseShellExecute = true
+                });
+                return;
+            }
+
+            MessageBox.Show($"Anhang ausgewählt: {attachment}", "Anhang", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Anhang kann nicht geöffnet werden: {ex.Message}", "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void ReflowMessages()

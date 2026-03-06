@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -234,6 +235,38 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
                 Text = text,
                 Attachments = attachments?.ToList() ?? []
             });
+        }
+
+        public void OpenAttachment(string attachment)
+        {
+            if (string.IsNullOrWhiteSpace(attachment))
+            {
+                return;
+            }
+
+            try
+            {
+                if (Uri.TryCreate(attachment, UriKind.Absolute, out var attachmentUri)
+                    && (attachmentUri.Scheme == Uri.UriSchemeHttp
+                        || attachmentUri.Scheme == Uri.UriSchemeHttps
+                        || attachmentUri.Scheme == Uri.UriSchemeFile))
+                {
+                    Process.Start(new ProcessStartInfo(attachmentUri.AbsoluteUri) { UseShellExecute = true });
+                    return;
+                }
+
+                if (File.Exists(attachment))
+                {
+                    Process.Start(new ProcessStartInfo(attachment) { UseShellExecute = true });
+                    return;
+                }
+
+                MessageBox.Show($"Anhang ausgewählt: {attachment}", "Anhang", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Anhang kann nicht geöffnet werden: {ex.Message}", "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }
