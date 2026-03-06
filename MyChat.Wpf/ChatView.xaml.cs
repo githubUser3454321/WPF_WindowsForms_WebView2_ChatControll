@@ -20,6 +20,7 @@ public partial class ChatView
     private int _rowHeight = 24;
     private string _currentUser = string.Empty;
     private readonly List<string> _pendingAttachments = [];
+    private bool _isHighlightingMentions;
 
     public ChatView()
     {
@@ -27,6 +28,11 @@ public partial class ChatView
         SendButton.Click += (_, _) => SendCurrentText();
         InputText.TextChanged += (_, _) =>
         {
+            if (_isHighlightingMentions)
+            {
+                return;
+            }
+
             HighlightMentions();
             UpdateMentionPopup();
             InputPlaceholder.Visibility = string.IsNullOrWhiteSpace(GetInputText()) ? Visibility.Visible : Visibility.Collapsed;
@@ -218,34 +224,62 @@ public partial class ChatView
 
     private void HighlightMentions()
     {
-        var all = new TextRange(InputText.Document.ContentStart, InputText.Document.ContentEnd);
-        all.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Black);
+        _isHighlightingMentions = true;
+        try
+        {
+            var selectionStartOffset = new TextRange(InputText.Document.ContentStart, InputText.Selection.Start).Text.Length;
+            var selectionEndOffset = new TextRange(InputText.Document.ContentStart, InputText.Selection.End).Text.Length;
+            var text = GetInputText();
 
-        var text = GetInputText();
+            SetInputTextWithHighlights(text);
+
+            var startPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, selectionStartOffset) ?? InputText.Document.ContentEnd;
+            var endPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, selectionEndOffset) ?? InputText.Document.ContentEnd;
+            InputText.Selection.Select(startPointer, endPointer);
+        }
+        finally
+        {
+            _isHighlightingMentions = false;
+        }
+    }
+
+    private void SetInputTextWithHighlights(string text)
+    {
+        InputText.Document.Blocks.Clear();
+        var paragraph = new Paragraph { Margin = new Thickness(0) };
+
         var index = 0;
         while (index < text.Length)
         {
             if (text[index] == '@')
             {
-                var end = index + 1;
-                while (end < text.Length && !char.IsWhiteSpace(text[end]))
+                var mentionEnd = index + 1;
+                while (mentionEnd < text.Length && !char.IsWhiteSpace(text[mentionEnd]))
                 {
-                    end++;
+                    mentionEnd++;
                 }
 
-                var startPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, index);
-                var endPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, end);
-                if (startPointer is not null && endPointer is not null)
-                {
-                    new TextRange(startPointer, endPointer).ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.RoyalBlue);
-                }
-
-                index = end;
+                paragraph.Inlines.Add(new Run(text[index..mentionEnd]) { Foreground = Brushes.RoyalBlue });
+                index = mentionEnd;
                 continue;
             }
 
-            index++;
+            var plainEnd = index + 1;
+            while (plainEnd < text.Length && text[plainEnd] != '@')
+            {
+                plainEnd++;
+            }
+
+            paragraph.Inlines.Add(new Run(text[index..plainEnd]) { Foreground = Brushes.Black });
+            index = plainEnd;
         }
+
+        if (paragraph.Inlines.Count == 0)
+        {
+            paragraph.Inlines.Add(new Run(string.Empty) { Foreground = Brushes.Black });
+        }
+
+        InputText.Document.Blocks.Add(paragraph);
     }
 
     private static TextPointer? GetTextPointerAtOffset(TextPointer start, int offset)
