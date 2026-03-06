@@ -33,6 +33,21 @@ chat.BindValues(new ChatBindModel
 chat.ReloadRequested += (_, _) => { /* reload */ };
 ```
 
+### Eigenes `WebView2`-Control bereitstellen
+
+Falls im Host-Projekt ein abgeleitetes `WebView2`-Control verwendet werden soll, kann dieses vor dem Erstellen des Chat-Controls registriert werden:
+
+```csharp
+MyChatControlFactory.UseCustomWebView2Component<MyCompanyWebView2>();
+var webChat = MyChatControlFactory.Create(ChatUiTechnology.WebView2);
+```
+
+Zurücksetzen auf das Standard-`WebView2`:
+
+```csharp
+MyChatControlFactory.ResetCustomWebView2Component();
+```
+
 ## Hinweise
 
 - Für `MyChat.WebView` wird das NuGet-Paket `Microsoft.Web.WebView2` benötigt.

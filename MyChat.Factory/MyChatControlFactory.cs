@@ -1,4 +1,5 @@
 using System.Windows.Forms;
+using Microsoft.Web.WebView2.WinForms;
 using MyChat.Abstractions;
 using MyChat.WebView;
 using MyChat.WinForms;
@@ -8,6 +9,16 @@ namespace MyChat.Factory;
 
 public static class MyChatControlFactory
 {
+    public static void UseCustomWebView2Component<TWebView2>() where TWebView2 : WebView2, new()
+    {
+        MyChatWebViewControl.UseWebViewFactory<TWebView2>();
+    }
+
+    public static void ResetCustomWebView2Component()
+    {
+        MyChatWebViewControl.ResetWebViewFactory();
+    }
+
     public static IMyChatBindable Create(ChatUiTechnology technology)
     {
         return technology switch
