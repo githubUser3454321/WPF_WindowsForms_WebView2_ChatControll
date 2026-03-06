@@ -7,7 +7,7 @@ using MyChat.Abstractions;
 
 namespace MyChat.Wpf;
 
-public partial class ChatView : UserControl
+public partial class ChatView
 {
     private static readonly string[] MentionCandidates = ["Support", "Ich"];
 
