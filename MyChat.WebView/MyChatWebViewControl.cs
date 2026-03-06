@@ -91,7 +91,8 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
         {
             sender = message.Sender,
             text = message.Text,
-            time = message.TimestampUtc.ToString("HH:mm")
+            time = message.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy, HH:mm:ss"),
+            attachments = message.Attachments
         });
 
         var js = $"window.chatInterop.addMessage({payload});";

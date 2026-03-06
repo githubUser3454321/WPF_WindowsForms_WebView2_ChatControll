@@ -74,6 +74,7 @@ public sealed class MyChatWpfControl : System.Windows.Forms.UserControl, IMyChat
 
         _chatView.ConfigureHeader(_headerHeight, label);
         _chatView.ConfigureRowHeight(_rowHeight);
+        _chatView.ConfigureCurrentUser(BoundModel?.CurrentUser ?? string.Empty);
         _chatView.SetInputPlaceholder("Nachricht ...");
     }
 }
