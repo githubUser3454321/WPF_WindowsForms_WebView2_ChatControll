@@ -17,6 +17,7 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
     private int _headerHeight = 32;
     private int _rowHeight = 24;
     private bool _isReady;
+    private readonly List<ChatMessage> _pendingMessages = [];
 
     public MyChatWebViewControl()
     {
@@ -87,19 +88,11 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
     {
         if (!_isReady)
         {
+            _pendingMessages.Add(message);
             return;
         }
 
-        var payload = JsonSerializer.Serialize(new
-        {
-            sender = message.Sender,
-            text = message.Text,
-            time = message.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy, HH:mm:ss"),
-            attachments = message.Attachments
-        });
-
-        var js = $"window.chatInterop.addMessage({payload});";
-        _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+        _ = AddMessageAsync(message);
     }
 
     private static WebView2 CreateWebView2FromFactory()
@@ -130,6 +123,13 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
         }
 
         await PushSettingsAsync();
+
+        foreach (var pendingMessage in _pendingMessages)
+        {
+            await AddMessageAsync(pendingMessage);
+        }
+
+        _pendingMessages.Clear();
     }
 
     private async Task PushSettingsAsync()
@@ -151,6 +151,20 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
 
         var js = $"window.chatInterop.applySettings({{ headerHeight: {_headerHeight}, rowHeight: {_rowHeight}, model: {payload} }});";
         await _webView.CoreWebView2.ExecuteScriptAsync(js);
+    }
+
+    private Task AddMessageAsync(ChatMessage message)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            sender = message.Sender,
+            text = message.Text,
+            time = message.TimestampUtc.ToLocalTime().ToString("dd.MM.yyyy, HH:mm:ss"),
+            attachments = message.Attachments
+        });
+
+        var js = $"window.chatInterop.addMessage({payload});";
+        return _webView.CoreWebView2.ExecuteScriptAsync(js);
     }
 
     [ComVisible(true)]

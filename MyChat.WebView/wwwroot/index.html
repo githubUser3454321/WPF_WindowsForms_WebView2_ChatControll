@@ -98,24 +98,27 @@
       ui.messages.scrollTop = ui.messages.scrollHeight;
     }
 
-    function getPlainInputText() {
-      return ui.input.innerText.replace(/\u00a0/g, ' ').trim();
+    function getRawInputText() {
+      return ui.input.innerText.replace(/\u00a0/g, ' ').replace(/\r/g, '');
     }
 
-    function renderInputMentions() {
-      const text = ui.input.innerText.replace(/\u00a0/g, ' ');
-      ui.input.innerHTML = escapeHtml(text).replace(/(^|\s)(@[\p{L}\d_]+)/gu, '$1<span class="mention">$2</span>');
-      const range = document.createRange();
+    function getPlainInputText() {
+      return getRawInputText().trim();
+    }
+
+    function getTextBeforeCaret() {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return getRawInputText();
+
+      const range = selection.getRangeAt(0).cloneRange();
       range.selectNodeContents(ui.input);
-      range.collapse(false);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
+      range.setEnd(selection.anchorNode, selection.anchorOffset);
+      return range.toString().replace(/\u00a0/g, ' ').replace(/\r/g, '');
     }
 
     function sendCurrent() {
-      const text = getPlainInputText();
+      const rawText = getRawInputText();
+      const text = rawText.trim();
       if (!text && pendingAttachments.length === 0) return;
 
       const timestamp = new Date().toLocaleString('de-DE', {
@@ -158,22 +161,22 @@
     }
 
     function updateMentionPopup() {
-      const text = ui.input.innerText.replace(/\u00a0/g, ' ');
-      const at = text.lastIndexOf('@');
+      const beforeCaret = getTextBeforeCaret();
+      const at = beforeCaret.lastIndexOf('@');
       if (at < 0) { closeMentionPopup(); return; }
-      const query = text.slice(at + 1);
+      const query = beforeCaret.slice(at + 1);
       if (/\s/.test(query)) { closeMentionPopup(); return; }
       showMentionPopup(at, query);
     }
 
     function commitMention() {
       if (!mentionState) return;
-      const text = ui.input.innerText.replace(/\u00a0/g, ' ');
+      const text = getRawInputText();
       let end = mentionState.atIndex + 1;
       while (end < text.length && !/\s/.test(text[end])) end++;
       const replacement = `@${mentionState.matches[mentionState.selected]} `;
       ui.input.innerText = text.slice(0, mentionState.atIndex) + replacement + text.slice(end);
-      renderInputMentions();
+      ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
       closeMentionPopup();
     }
 
@@ -208,7 +211,7 @@
     });
 
     ui.input.addEventListener('input', () => {
-      renderInputMentions();
+      ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
       updateMentionPopup();
     });
 
