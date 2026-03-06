@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MyChat WebView</title>
+  <style>
+    body { margin: 0; font-family: Segoe UI, Arial, sans-serif; }
+    #root { display: grid; grid-template-rows: 32px 1fr 40px; height: 100vh; }
+    #header { background: #244179; color: #fff; display: flex; align-items: center; padding: 0 10px; font-size: 13px; }
+    #messages { overflow: auto; padding: 6px; background: #fafafa; }
+    .msg { border-bottom: 1px solid #eee; padding: 2px 0; font-size: 13px; min-height: 24px; }
+    #inputBar { display: grid; grid-template-columns: 1fr 90px 90px; gap: 4px; padding: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="header">Chat (WebView2)</div>
+    <div id="messages"></div>
+    <div id="inputBar">
+      <input id="input" type="text" placeholder="Nachricht ..." />
+      <button id="send">Senden</button>
+      <button id="reload">Reload</button>
+    </div>
+  </div>
+
+  <script>
+    const ui = {
+      header: document.getElementById('header'),
+      messages: document.getElementById('messages'),
+      send: document.getElementById('send'),
+      reload: document.getElementById('reload'),
+      input: document.getElementById('input')
+    };
+
+    let model = null;
+
+    function appendMessage(sender, text, time) {
+      const row = document.createElement('div');
+      row.className = 'msg';
+      row.textContent = `[${time}] ${sender}: ${text}`;
+      ui.messages.appendChild(row);
+      ui.messages.scrollTop = ui.messages.scrollHeight;
+    }
+
+    ui.send.addEventListener('click', () => {
+      const text = ui.input.value.trim();
+      if (!text) return;
+      appendMessage(model?.currentUser || 'User', text, new Date().toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'}));
+      ui.input.value = '';
+    });
+
+    ui.reload.addEventListener('click', () => {
+      if (window.chrome?.webview?.hostObjects?.chatBridge) {
+        window.chrome.webview.hostObjects.chatBridge.NotifyReloadRequested();
+      }
+    });
+
+    window.chatInterop = {
+      applySettings(config) {
+        if (!config) return;
+        if (config.headerHeight) {
+          document.getElementById('root').style.gridTemplateRows = `${config.headerHeight}px 1fr 40px`;
+        }
+        if (config.rowHeight) {
+          const style = document.createElement('style');
+          style.innerHTML = `.msg { min-height: ${config.rowHeight}px; }`;
+          document.head.appendChild(style);
+        }
+        if (config.model) {
+          model = config.model;
+          ui.header.textContent = `Chat (WebView2) | ${model.objectType}/${model.recordId} | User: ${model.currentUser}`;
+        }
+      },
+      addMessage(payload) {
+        appendMessage(payload.sender, payload.text, payload.time);
+      }
+    };
+  </script>
+</body>
+</html>
