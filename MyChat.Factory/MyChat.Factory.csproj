@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyChat.Abstractions\MyChat.Abstractions.csproj" />
+    <ProjectReference Include="..\MyChat.WinForms\MyChat.WinForms.csproj" />
+    <ProjectReference Include="..\MyChat.Wpf\MyChat.Wpf.csproj" />
+    <ProjectReference Include="..\MyChat.WebView\MyChat.WebView.csproj" />
+  </ItemGroup>
+</Project>
