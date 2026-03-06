@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using MyChat.Abstractions;
 
@@ -7,16 +9,30 @@ namespace MyChat.Wpf;
 
 public partial class ChatView : UserControl
 {
+    private static readonly string[] MentionCandidates = ["Support", "Ich"];
+
     private int _rowHeight = 24;
     private string _currentUser = string.Empty;
+    private readonly List<string> _pendingAttachments = [];
 
     public ChatView()
     {
         InitializeComponent();
         SendButton.Click += (_, _) => SendCurrentText();
+        InputText.TextChanged += (_, _) =>
+        {
+            HighlightMentions();
+            UpdateMentionPopup();
+            InputPlaceholder.Visibility = string.IsNullOrWhiteSpace(GetInputText()) ? Visibility.Visible : Visibility.Collapsed;
+        };
+        InputText.PreviewKeyDown += InputTextOnPreviewKeyDown;
+        MentionList.MouseDoubleClick += (_, _) => CommitMentionSelection();
+        MentionList.PreviewKeyDown += MentionListOnPreviewKeyDown;
     }
 
     public event EventHandler? ReloadRequested;
+
+    public event EventHandler<ChatMessage>? MessageSubmitted;
 
     public void ConfigureHeader(int height, string text)
     {
@@ -102,7 +118,7 @@ public partial class ChatView : UserControl
 
     public void SetInputPlaceholder(string text)
     {
-        InputText.ToolTip = text;
+        InputPlaceholder.Text = text;
     }
 
     public void SetReloadHandler()
@@ -110,20 +126,234 @@ public partial class ChatView : UserControl
         ReloadButton.Click += (_, _) => ReloadRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    public string ConsumeInputText()
+    private string GetInputText()
     {
-        var value = InputText.Text;
-        InputText.Clear();
-        return value;
+        return new TextRange(InputText.Document.ContentStart, InputText.Document.ContentEnd).Text.TrimEnd('\r', '\n');
+    }
+
+    private void SetInputText(string text)
+    {
+        InputText.Document.Blocks.Clear();
+        InputText.Document.Blocks.Add(new Paragraph(new Run(text)) { Margin = new Thickness(0) });
+        InputText.CaretPosition = InputText.Document.ContentEnd;
+        HighlightMentions();
     }
 
     private void SendCurrentText()
     {
-        var text = ConsumeInputText();
-        if (!string.IsNullOrWhiteSpace(text))
+        var text = GetInputText();
+        if (string.IsNullOrWhiteSpace(text) && _pendingAttachments.Count == 0)
         {
-            AddMessage(new ChatMessage { Sender = string.IsNullOrWhiteSpace(_currentUser) ? "Ich" : _currentUser, Text = text.Trim() });
+            return;
         }
+
+        var message = new ChatMessage
+        {
+            Sender = string.IsNullOrWhiteSpace(_currentUser) ? "Ich" : _currentUser,
+            Text = text.Trim(),
+            Attachments = [.. _pendingAttachments]
+        };
+
+        AddMessage(message);
+        MessageSubmitted?.Invoke(this, message);
+
+        _pendingAttachments.Clear();
+        SetInputText(string.Empty);
+        MentionPopup.IsOpen = false;
+    }
+
+    private void InputTextOnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.V)
+        {
+            if (Clipboard.ContainsImage())
+            {
+                _pendingAttachments.Add($"ClipboardImage_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (MentionPopup.IsOpen && (e.Key == Key.Down || e.Key == Key.Up))
+        {
+            MoveMentionSelection(e.Key == Key.Down ? 1 : -1);
+            e.Handled = true;
+            return;
+        }
+
+        if (MentionPopup.IsOpen && (e.Key == Key.Tab || e.Key == Key.Enter))
+        {
+            CommitMentionSelection();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            SendCurrentText();
+            e.Handled = true;
+        }
+    }
+
+    private void MentionListOnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter || e.Key == Key.Tab)
+        {
+            CommitMentionSelection();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            MentionPopup.IsOpen = false;
+            InputText.Focus();
+        }
+    }
+
+    private void HighlightMentions()
+    {
+        var all = new TextRange(InputText.Document.ContentStart, InputText.Document.ContentEnd);
+        all.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Black);
+
+        var text = GetInputText();
+        var index = 0;
+        while (index < text.Length)
+        {
+            if (text[index] == '@')
+            {
+                var end = index + 1;
+                while (end < text.Length && !char.IsWhiteSpace(text[end]))
+                {
+                    end++;
+                }
+
+                var startPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, index);
+                var endPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, end);
+                if (startPointer is not null && endPointer is not null)
+                {
+                    new TextRange(startPointer, endPointer).ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.RoyalBlue);
+                }
+
+                index = end;
+                continue;
+            }
+
+            index++;
+        }
+    }
+
+    private static TextPointer? GetTextPointerAtOffset(TextPointer start, int offset)
+    {
+        var navigator = start;
+        var count = 0;
+        while (navigator is not null)
+        {
+            if (navigator.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var runText = navigator.GetTextInRun(LogicalDirection.Forward);
+                if (count + runText.Length >= offset)
+                {
+                    return navigator.GetPositionAtOffset(offset - count);
+                }
+
+                count += runText.Length;
+                navigator = navigator.GetPositionAtOffset(runText.Length);
+            }
+            else
+            {
+                navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
+            }
+        }
+
+        return start;
+    }
+
+    private void UpdateMentionPopup()
+    {
+        var text = GetInputText();
+        var caretOffset = new TextRange(InputText.Document.ContentStart, InputText.CaretPosition).Text.Length;
+        var beforeCaret = text[..Math.Min(caretOffset, text.Length)];
+        var at = beforeCaret.LastIndexOf('@');
+        if (at < 0)
+        {
+            MentionPopup.IsOpen = false;
+            return;
+        }
+
+        var query = beforeCaret[(at + 1)..];
+        if (query.Any(char.IsWhiteSpace))
+        {
+            MentionPopup.IsOpen = false;
+            return;
+        }
+
+        var matches = MentionCandidates.Where(x => x.StartsWith(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (matches.Count == 0)
+        {
+            MentionPopup.IsOpen = false;
+            return;
+        }
+
+        MentionList.ItemsSource = matches;
+        MentionList.SelectedIndex = 0;
+        MentionPopup.HorizontalOffset = 16;
+        MentionPopup.VerticalOffset = -128;
+        MentionPopup.IsOpen = true;
+    }
+
+    private void MoveMentionSelection(int delta)
+    {
+        if (MentionList.Items.Count == 0)
+        {
+            return;
+        }
+
+        var next = MentionList.SelectedIndex + delta;
+        if (next < 0)
+        {
+            next = MentionList.Items.Count - 1;
+        }
+        else if (next >= MentionList.Items.Count)
+        {
+            next = 0;
+        }
+
+        MentionList.SelectedIndex = next;
+        MentionList.ScrollIntoView(MentionList.SelectedItem);
+    }
+
+    private void CommitMentionSelection()
+    {
+        if (!MentionPopup.IsOpen || MentionList.SelectedItem is not string selected)
+        {
+            return;
+        }
+
+        var text = GetInputText();
+        var caretOffset = new TextRange(InputText.Document.ContentStart, InputText.CaretPosition).Text.Length;
+        var beforeCaret = text[..Math.Min(caretOffset, text.Length)];
+        var at = beforeCaret.LastIndexOf('@');
+        if (at < 0)
+        {
+            return;
+        }
+
+        var end = Math.Min(caretOffset, text.Length);
+        while (end < text.Length && !char.IsWhiteSpace(text[end]))
+        {
+            end++;
+        }
+
+        var replacement = $"@{selected} ";
+        SetInputText(text[..at] + replacement + text[end..]);
+        var newPointer = GetTextPointerAtOffset(InputText.Document.ContentStart, at + replacement.Length);
+        if (newPointer is not null)
+        {
+            InputText.CaretPosition = newPointer;
+        }
+
+        MentionPopup.IsOpen = false;
+        InputText.Focus();
     }
 
     private bool IsOwnMessage(string sender)

@@ -10,6 +10,8 @@ public interface IMyChatBindable
 
     event EventHandler? ReloadRequested;
 
+    event EventHandler<ChatMessage>? MessageSubmitted;
+
     void BindValues(ChatBindModel model);
 
     void AddMessage(ChatMessage message);

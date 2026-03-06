@@ -134,6 +134,7 @@ public sealed class MainForm : Form
         if (_chat is not null)
         {
             _chat.ReloadRequested -= ChatOnReloadRequested;
+            _chat.MessageSubmitted -= ChatOnMessageSubmitted;
         }
 
         _chatHostPanel.Controls.Clear();
@@ -145,20 +146,27 @@ public sealed class MainForm : Form
 
         _chat.HeaderHeight = 32;
         _chat.RowHeight = 24;
-        _chat.BindValues(new ChatBindModel
-        {
-            ObjectType = "Invoice",
-            RecordId = "123",
-            CurrentUser = "Matthias"
-        });
+        _chat.BindValues(Program.Memory.Model);
 
-        _chat.AddMessage(new ChatMessage
+        foreach (var message in Program.Memory.SnapshotMessages())
         {
-            Sender = "System",
-            Text = $"Variante {technology} ist aktiv.",
-            Attachments = ["Einführung.pdf", "Screenshot.png"]
-        });
+            _chat.AddMessage(message);
+        }
+
+        if (Program.Memory.SnapshotMessages().Count == 0)
+        {
+            var infoMessage = new ChatMessage
+            {
+                Sender = "System",
+                Text = "Variante ist aktiv.",
+                Attachments = ["Einführung.pdf", "Screenshot.png"]
+            };
+            Program.Memory.AddMessage(infoMessage);
+            _chat.AddMessage(infoMessage);
+        }
+
         _chat.ReloadRequested += ChatOnReloadRequested;
+        _chat.MessageSubmitted += ChatOnMessageSubmitted;
 
         _chatHostPanel.Controls.Add(chatControl);
         _statusLabel.Text = $"Geladen: {technology}";
@@ -179,11 +187,14 @@ public sealed class MainForm : Form
             return;
         }
 
-        _chat.AddMessage(new ChatMessage
+        var message = new ChatMessage
         {
             Sender = sender,
             Text = text
-        });
+        };
+
+        _chat.AddMessage(message);
+        Program.Memory.AddMessage(message);
 
         textBox.Clear();
         _statusLabel.Text = $"Nachricht von '{sender}' hinzugefügt.";
@@ -193,4 +204,11 @@ public sealed class MainForm : Form
     {
         _statusLabel.Text = $"Reload empfangen um {DateTime.Now:HH:mm:ss}";
     }
+
+    private void ChatOnMessageSubmitted(object? sender, ChatMessage message)
+    {
+        Program.Memory.AddMessage(message);
+        _statusLabel.Text = $"Nachricht gesendet um {DateTime.Now:HH:mm:ss}";
+    }
+
 }
