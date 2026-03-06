@@ -16,6 +16,7 @@ public sealed class MyChatWpfControl : System.Windows.Forms.UserControl, IMyChat
         _chatView = new ChatView();
         _chatView.SetReloadHandler();
         _chatView.ReloadRequested += (_, _) => ReloadRequested?.Invoke(this, EventArgs.Empty);
+        _chatView.MessageSubmitted += (_, message) => MessageSubmitted?.Invoke(this, message);
 
         _host = new ElementHost
         {
@@ -54,6 +55,8 @@ public sealed class MyChatWpfControl : System.Windows.Forms.UserControl, IMyChat
     public ChatBindModel? BoundModel { get; private set; }
 
     public event EventHandler? ReloadRequested;
+
+    public event EventHandler<ChatMessage>? MessageSubmitted;
 
     public void BindValues(ChatBindModel model)
     {

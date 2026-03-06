@@ -18,9 +18,14 @@
     .message-item.outgoing .message-bubble { background: #dceeff; }
     .attachment-list { margin-top: 8px; padding-top: 8px; border-top: 1px solid #d8e0ec; display: flex; flex-direction: column; gap: 6px; }
     .attachment-link { text-decoration: none; color: #244179; border: 1px solid #c8d2e2; border-radius: 6px; padding: 6px 8px; background: #ffffffc7; font-size: 12px; }
-    #inputBar { display: grid; grid-template-columns: 1fr 42px 90px; gap: 6px; padding: 8px 12px; background: #fff; border-top: 1px solid #dce2ea; }
-    #input { border: 1px solid #c8d2e2; border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+    #inputBar { display: grid; grid-template-columns: 1fr 42px 90px; gap: 6px; padding: 8px 12px; background: #fff; border-top: 1px solid #dce2ea; position: relative; }
+    #input { border: 1px solid #c8d2e2; border-radius: 6px; padding: 8px 10px; font-size: 14px; min-height: 34px; max-height: 74px; overflow: auto; background: white; }
+    #input[contenteditable=true]:empty:before { content: attr(data-placeholder); color: #7f8ba1; }
     #input:focus { outline: 2px solid #88a6d8; border-color: #88a6d8; }
+    .mention { color: #2563eb; }
+    #mentionPopup { position: absolute; left: 14px; bottom: 48px; width: 180px; border: 1px solid #c8d2e2; border-radius: 6px; background: white; display: none; z-index: 5; }
+    #mentionPopup button { width: 100%; border: 0; background: white; text-align: left; padding: 7px 9px; cursor: pointer; }
+    #mentionPopup button.active { background: #e9f0ff; }
     #send { border: 0; border-radius: 6px; background: #244179; color: white; font-weight: 700; cursor: pointer; }
     #send:hover { background: #1e3665; }
     #send:disabled { background: #a7b7d3; cursor: not-allowed; }
@@ -31,22 +36,29 @@
     <div id="header">Chat (WebView2)</div>
     <div id="messages"></div>
     <div id="inputBar">
-      <input id="input" type="text" placeholder="Nachricht ..." />
+      <div id="input" contenteditable="true" data-placeholder="Nachricht ..."></div>
+      <div id="mentionPopup"></div>
       <button id="send">➤</button>
       <button id="reload">Reload</button>
     </div>
   </div>
 
   <script>
+    const mentionCandidates = ['Support', 'Ich'];
     const ui = {
       header: document.getElementById('header'),
       messages: document.getElementById('messages'),
       send: document.getElementById('send'),
       reload: document.getElementById('reload'),
-      input: document.getElementById('input')
+      input: document.getElementById('input'),
+      mentionPopup: document.getElementById('mentionPopup')
     };
 
     let model = null;
+    let pendingAttachments = [];
+    let mentionState = null;
+
+    function escapeHtml(t) { return t.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
 
     function isOwnMessage(sender) {
       if (!sender) return false;
@@ -86,33 +98,119 @@
       ui.messages.scrollTop = ui.messages.scrollHeight;
     }
 
-    ui.send.addEventListener('click', () => {
-      const text = ui.input.value.trim();
-      if (!text) return;
+    function getPlainInputText() {
+      return ui.input.innerText.replace(/\u00a0/g, ' ').trim();
+    }
+
+    function renderInputMentions() {
+      const text = ui.input.innerText.replace(/\u00a0/g, ' ');
+      ui.input.innerHTML = escapeHtml(text).replace(/(^|\s)(@[\p{L}\d_]+)/gu, '$1<span class="mention">$2</span>');
+      const range = document.createRange();
+      range.selectNodeContents(ui.input);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      ui.send.disabled = getPlainInputText().length === 0 && pendingAttachments.length === 0;
+    }
+
+    function sendCurrent() {
+      const text = getPlainInputText();
+      if (!text && pendingAttachments.length === 0) return;
+
       const timestamp = new Date().toLocaleString('de-DE', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
       });
-      appendMessage(model?.currentUser || 'Ich', text, timestamp);
-      ui.input.value = '';
+
+      const sender = model?.currentUser || 'Ich';
+      appendMessage(sender, text, timestamp, [...pendingAttachments]);
+      if (window.chrome?.webview?.hostObjects?.chatBridge) {
+        window.chrome.webview.hostObjects.chatBridge.SubmitMessage(sender, text, [...pendingAttachments]);
+      }
+      pendingAttachments = [];
+      ui.input.innerHTML = '';
       ui.send.disabled = true;
-    });
+      closeMentionPopup();
+    }
+
+    function closeMentionPopup() {
+      ui.mentionPopup.style.display = 'none';
+      mentionState = null;
+    }
+
+    function showMentionPopup(atIndex, query) {
+      const matches = mentionCandidates.filter(x => x.toLowerCase().startsWith(query.toLowerCase()));
+      if (!matches.length) { closeMentionPopup(); return; }
+      mentionState = { atIndex, matches, selected: 0 };
+      ui.mentionPopup.innerHTML = matches.map((m, i) => `<button class="${i===0?'active':''}" data-v="${m}">${m}</button>`).join('');
+      ui.mentionPopup.style.display = 'block';
+      [...ui.mentionPopup.querySelectorAll('button')].forEach((b, i) => {
+        b.addEventListener('mouseenter', () => setMentionSelection(i));
+        b.addEventListener('mousedown', (e) => { e.preventDefault(); setMentionSelection(i); commitMention(); });
+      });
+    }
+
+    function setMentionSelection(index) {
+      if (!mentionState) return;
+      mentionState.selected = index;
+      [...ui.mentionPopup.querySelectorAll('button')].forEach((b, i) => b.classList.toggle('active', i === index));
+    }
+
+    function updateMentionPopup() {
+      const text = ui.input.innerText.replace(/\u00a0/g, ' ');
+      const at = text.lastIndexOf('@');
+      if (at < 0) { closeMentionPopup(); return; }
+      const query = text.slice(at + 1);
+      if (/\s/.test(query)) { closeMentionPopup(); return; }
+      showMentionPopup(at, query);
+    }
+
+    function commitMention() {
+      if (!mentionState) return;
+      const text = ui.input.innerText.replace(/\u00a0/g, ' ');
+      let end = mentionState.atIndex + 1;
+      while (end < text.length && !/\s/.test(text[end])) end++;
+      const replacement = `@${mentionState.matches[mentionState.selected]} `;
+      ui.input.innerText = text.slice(0, mentionState.atIndex) + replacement + text.slice(end);
+      renderInputMentions();
+      closeMentionPopup();
+    }
+
+    ui.send.addEventListener('click', sendCurrent);
 
     ui.input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !ui.send.disabled) {
-        ui.send.click();
+      if (event.ctrlKey && event.key.toLowerCase() === 'v') {
+        pendingAttachments.push(`ClipboardImage_${new Date().toISOString().replaceAll(/[:.-]/g, '').slice(0, 15)}.png`);
+        ui.send.disabled = false;
+        event.preventDefault();
+        return;
+      }
+
+      if (mentionState && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        const delta = event.key === 'ArrowDown' ? 1 : -1;
+        const count = mentionState.matches.length;
+        setMentionSelection((mentionState.selected + delta + count) % count);
+        event.preventDefault();
+        return;
+      }
+
+      if (mentionState && (event.key === 'Enter' || event.key === 'Tab')) {
+        commitMention();
+        event.preventDefault();
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        sendCurrent();
+        event.preventDefault();
       }
     });
 
     ui.input.addEventListener('input', () => {
-      ui.send.disabled = ui.input.value.trim().length === 0;
+      renderInputMentions();
+      updateMentionPopup();
     });
-
-    ui.send.disabled = true;
 
     ui.reload.addEventListener('click', () => {
       if (window.chrome?.webview?.hostObjects?.chatBridge) {

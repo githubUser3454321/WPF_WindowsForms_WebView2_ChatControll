@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 using MyChat.Abstractions;
 
 namespace MyChat.WinForms;
@@ -9,13 +10,18 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
     private readonly Label _headerLabel;
     private readonly FlowLayoutPanel _messageFlow;
     private readonly Panel _messageHost;
-    private readonly TextBox _inputBox;
+    private readonly RichTextBox _inputBox;
+    private readonly ListBox _mentionListBox;
     private readonly Button _sendButton;
     private readonly Button _reloadButton;
     private readonly TableLayoutPanel _layout;
 
+    private static readonly string[] MentionCandidates = ["Support", "Ich"];
+    private static readonly Regex MentionRegex = new(@"(?<!\w)@([\p{L}\d_]*)", RegexOptions.Compiled);
+
     private int _headerHeight = 32;
     private int _rowHeight = 24;
+    private readonly List<string> _pendingAttachments = [];
 
     public MyChatWinFormsControl()
     {
@@ -75,7 +81,22 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
         inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
         inputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
 
-        _inputBox = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "Nachricht ...", BorderStyle = BorderStyle.FixedSingle };
+        _inputBox = new RichTextBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.FixedSingle, AcceptsTab = false, Multiline = false };
+        _inputBox.TextChanged += (_, _) => HighlightMentionsAndToggleSend();
+        _inputBox.KeyDown += InputBoxOnKeyDown;
+        _inputBox.KeyUp += (_, _) => UpdateMentionPopup();
+
+        _mentionListBox = new ListBox
+        {
+            Visible = false,
+            Width = 180,
+            Height = 70,
+            IntegralHeight = false
+        };
+        _mentionListBox.Items.AddRange(MentionCandidates);
+        _mentionListBox.DoubleClick += (_, _) => CommitMentionSelection();
+        _mentionListBox.KeyDown += MentionListBoxOnKeyDown;
+        _mentionListBox.LostFocus += (_, _) => { if (!ContainsFocus) _mentionListBox.Visible = false; };
         _sendButton = new Button { Dock = DockStyle.Fill, Text = "➤", FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(36, 65, 121), ForeColor = Color.White };
         _reloadButton = new Button { Dock = DockStyle.Fill, Text = "Reload" };
 
@@ -91,6 +112,8 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
         _layout.Controls.Add(_messageHost, 0, 1);
         _layout.Controls.Add(inputPanel, 0, 2);
 
+        Controls.Add(_mentionListBox);
+        _mentionListBox.BringToFront();
         Controls.Add(_layout);
     }
 
@@ -122,6 +145,8 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
 
     public event EventHandler? ReloadRequested;
 
+    public event EventHandler<ChatMessage>? MessageSubmitted;
+
     public void BindValues(ChatBindModel model)
     {
         BoundModel = model;
@@ -139,14 +164,190 @@ public sealed class MyChatWinFormsControl : UserControl, IMyChatBindable
 
     private void SendCurrentText()
     {
-        if (string.IsNullOrWhiteSpace(_inputBox.Text))
+        var rawText = _inputBox.Text;
+        if (string.IsNullOrWhiteSpace(rawText) && _pendingAttachments.Count == 0)
         {
             return;
         }
 
         var user = BoundModel?.CurrentUser ?? "Ich";
-        AddMessage(new ChatMessage { Sender = user, Text = _inputBox.Text.Trim() });
+        var message = new ChatMessage
+        {
+            Sender = user,
+            Text = rawText.Trim(),
+            Attachments = [.. _pendingAttachments]
+        };
+
+        AddMessage(message);
+        MessageSubmitted?.Invoke(this, message);
+        _pendingAttachments.Clear();
         _inputBox.Clear();
+        _mentionListBox.Visible = false;
+    }
+
+
+    private void InputBoxOnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Control && e.KeyCode == Keys.V)
+        {
+            TryPasteClipboardImage();
+            e.SuppressKeyPress = true;
+            return;
+        }
+
+        if (e.KeyCode == Keys.Enter && !e.Shift)
+        {
+            e.SuppressKeyPress = true;
+            SendCurrentText();
+            return;
+        }
+
+        if (_mentionListBox.Visible && (e.KeyCode == Keys.Down || e.KeyCode == Keys.Up))
+        {
+            FocusMentionList(e.KeyCode == Keys.Down ? 1 : -1);
+            e.SuppressKeyPress = true;
+            return;
+        }
+
+        if (_mentionListBox.Visible && e.KeyCode == Keys.Tab)
+        {
+            CommitMentionSelection();
+            e.SuppressKeyPress = true;
+        }
+    }
+
+    private void MentionListBoxOnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Tab)
+        {
+            CommitMentionSelection();
+            e.SuppressKeyPress = true;
+        }
+        else if (e.KeyCode == Keys.Escape)
+        {
+            _mentionListBox.Visible = false;
+            _inputBox.Focus();
+        }
+    }
+
+    private void TryPasteClipboardImage()
+    {
+        if (!Clipboard.ContainsImage())
+        {
+            return;
+        }
+
+        var attachmentName = $"ClipboardImage_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+        _pendingAttachments.Add(attachmentName);
+        HighlightMentionsAndToggleSend();
+    }
+
+    private void HighlightMentionsAndToggleSend()
+    {
+        var start = _inputBox.SelectionStart;
+        var length = _inputBox.SelectionLength;
+
+        _inputBox.SelectAll();
+        _inputBox.SelectionColor = Color.Black;
+
+        foreach (Match match in MentionRegex.Matches(_inputBox.Text))
+        {
+            _inputBox.Select(match.Index, match.Length);
+            _inputBox.SelectionColor = Color.RoyalBlue;
+        }
+
+        _inputBox.Select(start, length);
+        _sendButton.Enabled = !string.IsNullOrWhiteSpace(_inputBox.Text) || _pendingAttachments.Count > 0;
+    }
+
+    private void UpdateMentionPopup()
+    {
+        var caret = _inputBox.SelectionStart;
+        var textBeforeCaret = _inputBox.Text[..Math.Min(caret, _inputBox.Text.Length)];
+        var lastAt = textBeforeCaret.LastIndexOf('@');
+        if (lastAt < 0)
+        {
+            _mentionListBox.Visible = false;
+            return;
+        }
+
+        var query = textBeforeCaret[(lastAt + 1)..];
+        if (query.Contains(' ') || query.Contains('\n'))
+        {
+            _mentionListBox.Visible = false;
+            return;
+        }
+
+        var matches = MentionCandidates
+            .Where(x => x.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (matches.Length == 0)
+        {
+            _mentionListBox.Visible = false;
+            return;
+        }
+
+        _mentionListBox.BeginUpdate();
+        _mentionListBox.Items.Clear();
+        _mentionListBox.Items.AddRange(matches);
+        _mentionListBox.SelectedIndex = 0;
+        _mentionListBox.EndUpdate();
+
+        var point = _inputBox.GetPositionFromCharIndex(lastAt);
+        _mentionListBox.Left = _layout.Left + 24 + Math.Max(0, point.X);
+        _mentionListBox.Top = Height - 130;
+        _mentionListBox.Visible = true;
+        _mentionListBox.BringToFront();
+    }
+
+    private void FocusMentionList(int delta)
+    {
+        if (_mentionListBox.Items.Count == 0)
+        {
+            return;
+        }
+
+        var next = _mentionListBox.SelectedIndex + delta;
+        if (next < 0)
+        {
+            next = _mentionListBox.Items.Count - 1;
+        }
+        else if (next >= _mentionListBox.Items.Count)
+        {
+            next = 0;
+        }
+
+        _mentionListBox.SelectedIndex = next;
+    }
+
+    private void CommitMentionSelection()
+    {
+        if (!_mentionListBox.Visible || _mentionListBox.SelectedItem is not string value)
+        {
+            return;
+        }
+
+        var caret = _inputBox.SelectionStart;
+        var text = _inputBox.Text;
+        var lastAt = text[..Math.Min(caret, text.Length)].LastIndexOf('@');
+        if (lastAt < 0)
+        {
+            return;
+        }
+
+        var suffixStart = caret;
+        while (suffixStart < text.Length && !char.IsWhiteSpace(text[suffixStart]))
+        {
+            suffixStart++;
+        }
+
+        var replacement = $"@{value} ";
+        _inputBox.Text = text[..lastAt] + replacement + text[suffixStart..];
+        _inputBox.SelectionStart = lastAt + replacement.Length;
+        _mentionListBox.Visible = false;
+        HighlightMentionsAndToggleSend();
+        _inputBox.Focus();
     }
 
     private bool IsOwnMessage(string sender)

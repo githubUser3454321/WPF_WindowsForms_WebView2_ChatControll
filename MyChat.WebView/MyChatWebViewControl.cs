@@ -22,6 +22,7 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
     {
         _bridge = new ScriptBridge();
         _bridge.ReloadRequested += (_, _) => ReloadRequested?.Invoke(this, EventArgs.Empty);
+        _bridge.MessageSubmitted += (_, message) => MessageSubmitted?.Invoke(this, message);
 
         _webView = CreateWebView2FromFactory();
         _webView.Dock = DockStyle.Fill;
@@ -72,6 +73,8 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
     public ChatBindModel? BoundModel { get; private set; }
 
     public event EventHandler? ReloadRequested;
+
+    public event EventHandler<ChatMessage>? MessageSubmitted;
 
     public void BindValues(ChatBindModel model)
     {
@@ -155,9 +158,21 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
     {
         public event EventHandler? ReloadRequested;
 
+        public event EventHandler<ChatMessage>? MessageSubmitted;
+
         public void NotifyReloadRequested()
         {
             ReloadRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SubmitMessage(string sender, string text, string[] attachments)
+        {
+            MessageSubmitted?.Invoke(this, new ChatMessage
+            {
+                Sender = sender,
+                Text = text,
+                Attachments = attachments?.ToList() ?? []
+            });
         }
     }
 }
