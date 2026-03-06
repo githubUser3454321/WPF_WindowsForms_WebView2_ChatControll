@@ -152,7 +152,12 @@ public sealed class MainForm : Form
             CurrentUser = "Matthias"
         });
 
-        _chat.AddMessage(new ChatMessage { Sender = "System", Text = $"Variante {technology} ist aktiv." });
+        _chat.AddMessage(new ChatMessage
+        {
+            Sender = "System",
+            Text = $"Variante {technology} ist aktiv.",
+            Attachments = ["Einführung.pdf", "Screenshot.png"]
+        });
         _chat.ReloadRequested += ChatOnReloadRequested;
 
         _chatHostPanel.Controls.Add(chatControl);
