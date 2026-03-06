@@ -41,7 +41,7 @@
                                Foreground="#818C9E"
                                IsHitTestVisible="False"
                                Text="Nachricht ..."/>
-                    <Popup x:Name="MentionPopup" Placement="Relative" PlacementTarget="InputText" StaysOpen="False" AllowsTransparency="True">
+                    <Popup x:Name="MentionPopup" Placement="Relative" PlacementTarget="{Binding ElementName=InputText}" StaysOpen="False" AllowsTransparency="True">
                         <Border BorderBrush="#C8D2E2" BorderThickness="1" Background="White" CornerRadius="4">
                             <ListBox x:Name="MentionList" Width="180" MaxHeight="120"/>
                         </Border>
