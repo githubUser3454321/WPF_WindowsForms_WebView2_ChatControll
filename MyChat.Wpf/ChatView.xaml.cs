@@ -6,8 +6,10 @@ using System.Windows.Media;
 using MyChat.Abstractions;
 using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
+using Clipboard = System.Windows.Forms.Clipboard;
 using Color = System.Windows.Media.Color;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace MyChat.Wpf;
 
@@ -29,7 +31,7 @@ public partial class ChatView
             UpdateMentionPopup();
             InputPlaceholder.Visibility = string.IsNullOrWhiteSpace(GetInputText()) ? Visibility.Visible : Visibility.Collapsed;
         };
-        InputText.PreviewKeyDown += InputTextOnPreviewKeyDown;
+        InputText.PreviewKeyDown += (sender,e) => InputTextOnPreviewKeyDown(sender, e);
         MentionList.MouseDoubleClick += (_, _) => CommitMentionSelection();
         MentionList.PreviewKeyDown += MentionListOnPreviewKeyDown;
     }
