@@ -9,7 +9,7 @@ namespace MyChat.WebView;
 
 public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
 {
-    private static Func<WebView2> s_webViewFactory = () => new WebView2();
+    private static Func<Control> s_webViewFactory = static () => new WebView2();
 
     private readonly WebView2 _webView;
     private readonly ScriptBridge _bridge;
@@ -23,10 +23,16 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
         _bridge = new ScriptBridge();
         _bridge.ReloadRequested += (_, _) => ReloadRequested?.Invoke(this, EventArgs.Empty);
 
-        _webView = s_webViewFactory();
+        _webView = CreateWebView2FromFactory();
         _webView.Dock = DockStyle.Fill;
         Controls.Add(_webView);
         _ = InitializeAsync();
+    }
+
+    public static void UseWebViewFactory(Func<Control> webViewFactory)
+    {
+        ArgumentNullException.ThrowIfNull(webViewFactory);
+        s_webViewFactory = webViewFactory;
     }
 
     public static void UseWebViewFactory<TWebView2>() where TWebView2 : WebView2, new()
@@ -90,6 +96,14 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
 
         var js = $"window.chatInterop.addMessage({payload});";
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
+    }
+
+    private static WebView2 CreateWebView2FromFactory()
+    {
+        var created = s_webViewFactory();
+        return created as WebView2
+            ?? throw new InvalidOperationException(
+                $"Configured WebView factory must return a '{typeof(WebView2).FullName}' control.");
     }
 
     private async Task InitializeAsync()
