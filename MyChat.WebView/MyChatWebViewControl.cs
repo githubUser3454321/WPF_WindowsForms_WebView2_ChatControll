@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using MyChat.Abstractions;
@@ -67,7 +68,14 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
             return;
         }
 
-        var js = $$"window.chatInterop.addMessage({{ sender: {{ToJs(message.Sender)}}, text: {{ToJs(message.Text)}}, time: {{ToJs(message.TimestampUtc.ToString("HH:mm"))}} }});";
+        var payload = JsonSerializer.Serialize(new
+        {
+            sender = message.Sender,
+            text = message.Text,
+            time = message.TimestampUtc.ToString("HH:mm")
+        });
+
+        var js = $"window.chatInterop.addMessage({payload});";
         _ = _webView.CoreWebView2.ExecuteScriptAsync(js);
     }
 
@@ -103,15 +111,15 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
         var model = _pendingModel ?? BoundModel;
         var payload = model is null
             ? "{}"
-            : $$"{\"objectType\":{{ToJs(model.ObjectType)}},\"recordId\":{{ToJs(model.RecordId)}},\"currentUser\":{{ToJs(model.CurrentUser)}}}";
+            : JsonSerializer.Serialize(new
+            {
+                objectType = model.ObjectType,
+                recordId = model.RecordId,
+                currentUser = model.CurrentUser
+            });
 
-        var js = $$"window.chatInterop.applySettings({ headerHeight: {{_headerHeight}}, rowHeight: {{_rowHeight}}, model: {{payload}} });";
+        var js = $"window.chatInterop.applySettings({{ headerHeight: {_headerHeight}, rowHeight: {_rowHeight}, model: {payload} }});";
         await _webView.CoreWebView2.ExecuteScriptAsync(js);
-    }
-
-    private static string ToJs(string value)
-    {
-        return System.Text.Json.JsonSerializer.Serialize(value);
     }
 
     [ComVisible(true)]
