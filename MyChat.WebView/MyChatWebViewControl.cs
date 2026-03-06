@@ -9,6 +9,8 @@ namespace MyChat.WebView;
 
 public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
 {
+    private static Func<WebView2> s_webViewFactory = () => new WebView2();
+
     private readonly WebView2 _webView;
     private readonly ScriptBridge _bridge;
     private ChatBindModel? _pendingModel;
@@ -21,9 +23,20 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
         _bridge = new ScriptBridge();
         _bridge.ReloadRequested += (_, _) => ReloadRequested?.Invoke(this, EventArgs.Empty);
 
-        _webView = new WebView2 { Dock = DockStyle.Fill };
+        _webView = s_webViewFactory();
+        _webView.Dock = DockStyle.Fill;
         Controls.Add(_webView);
         _ = InitializeAsync();
+    }
+
+    public static void UseWebViewFactory<TWebView2>() where TWebView2 : WebView2, new()
+    {
+        s_webViewFactory = static () => new TWebView2();
+    }
+
+    public static void ResetWebViewFactory()
+    {
+        s_webViewFactory = static () => new WebView2();
     }
 
     [Browsable(true)]
