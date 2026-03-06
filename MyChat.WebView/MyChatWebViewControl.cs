@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using MyChat.Abstractions;
@@ -107,11 +108,57 @@ public sealed class MyChatWebViewControl : UserControl, IMyChatBindable
     {
         await _webView.EnsureCoreWebView2Async();
         _webView.CoreWebView2.Settings.IsWebMessageEnabled = true;
+        _webView.CoreWebView2.WebMessageReceived += CoreWebView2OnWebMessageReceived;
         _webView.CoreWebView2.AddHostObjectToScript("chatBridge", _bridge);
 
         var indexPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "index.html");
         _webView.CoreWebView2.Navigate(new Uri(indexPath).AbsoluteUri);
         _webView.CoreWebView2.NavigationCompleted += CoreWebView2OnNavigationCompleted;
+    }
+
+    private void CoreWebView2OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        JsonNode? messageEnvelope;
+        try
+        {
+            messageEnvelope = JsonNode.Parse(e.WebMessageAsJson);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        var messageType = messageEnvelope?["type"]?.GetValue<string>();
+
+        switch (messageType)
+        {
+            case "reload-requested":
+                ReloadRequested?.Invoke(this, EventArgs.Empty);
+                break;
+
+            case "message-submitted":
+                var payload = messageEnvelope?["payload"];
+                var senderName = payload?["sender"]?.GetValue<string>();
+                var text = payload?["text"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(senderName) || string.IsNullOrWhiteSpace(text))
+                {
+                    return;
+                }
+
+                var attachments = payload?["attachments"]?.AsArray()
+                    .Select(node => node?.GetValue<string>())
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Cast<string>()
+                    .ToList() ?? [];
+
+                MessageSubmitted?.Invoke(this, new ChatMessage
+                {
+                    Sender = senderName,
+                    Text = text,
+                    Attachments = attachments
+                });
+                break;
+        }
     }
 
     private async void CoreWebView2OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
