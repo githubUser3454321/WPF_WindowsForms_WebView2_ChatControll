@@ -4,55 +4,64 @@ namespace MyChat.Host.WinForms;
 
 internal static class Program
 {
-    internal static readonly ChatMemoryStore Memory = new();
-
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
+        var options = StartupOptions.Parse(args);
+
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        Application.Run(new MainForm(options));
     }
 }
 
-internal sealed class ChatMemoryStore
+internal sealed class StartupOptions
 {
-    private readonly object _gate = new();
-    private readonly List<ChatMessage> _messages = [];
+    public ChatParticipantRole Role { get; init; } = ChatParticipantRole.Supporter;
 
-    public ChatBindModel Model { get; } = new()
-    {
-        ObjectType = "Invoice",
-        RecordId = "123",
-        CurrentUser = "Matthias"
-    };
+    public string DisplayName { get; init; } = "Supporter";
 
-    public IReadOnlyList<ChatMessage> SnapshotMessages()
+    public ChatSyncTechnology InitialSyncTechnology { get; init; } = ChatSyncTechnology.None;
+
+    public Uri SyncServiceUri { get; init; } = new("http://localhost:5088/");
+
+    public string SyncChannel { get; init; } = "chat-default";
+
+    public static StartupOptions Parse(string[] args)
     {
-        lock (_gate)
+        var values = args
+            .Select(a => a.Split('=', 2, StringSplitOptions.TrimEntries))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[0].TrimStart('-').ToLowerInvariant(), parts => parts[1], StringComparer.OrdinalIgnoreCase);
+
+        var role = values.TryGetValue("role", out var roleText)
+            && Enum.TryParse<ChatParticipantRole>(roleText, ignoreCase: true, out var parsedRole)
+            ? parsedRole
+            : ChatParticipantRole.Supporter;
+
+        var technology = values.TryGetValue("sync", out var syncText)
+            && Enum.TryParse<ChatSyncTechnology>(syncText, ignoreCase: true, out var parsedTechnology)
+            ? parsedTechnology
+            : ChatSyncTechnology.None;
+
+        var serviceUri = values.TryGetValue("syncurl", out var uriText) && Uri.TryCreate(uriText, UriKind.Absolute, out var parsedUri)
+            ? parsedUri
+            : new Uri("http://localhost:5088/");
+
+        var displayName = values.TryGetValue("displayname", out var customName)
+            ? customName
+            : (role == ChatParticipantRole.Applikationsentwickler ? "Applikationsentwickler" : "Supporter");
+
+        var channel = values.TryGetValue("channel", out var channelValue)
+            ? channelValue
+            : "chat-default";
+
+        return new StartupOptions
         {
-            return _messages
-                .Select(x => new ChatMessage
-                {
-                    Sender = x.Sender,
-                    Text = x.Text,
-                    TimestampUtc = x.TimestampUtc,
-                    Attachments = [.. x.Attachments]
-                })
-                .ToList();
-        }
-    }
-
-    public void AddMessage(ChatMessage message)
-    {
-        lock (_gate)
-        {
-            _messages.Add(new ChatMessage
-            {
-                Sender = message.Sender,
-                Text = message.Text,
-                TimestampUtc = message.TimestampUtc,
-                Attachments = [.. message.Attachments]
-            });
-        }
+            Role = role,
+            DisplayName = displayName,
+            InitialSyncTechnology = technology,
+            SyncServiceUri = serviceUri,
+            SyncChannel = channel
+        };
     }
 }
