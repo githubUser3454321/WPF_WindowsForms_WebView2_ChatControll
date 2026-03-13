@@ -8,9 +8,30 @@ Diese Solution demonstriert ein wiederverwendbares Chat-Control mit gemeinsamer 
 
 ## Projekte
 
-- `MyChat.Abstractions`: gemeinsame API (`IMyChatBindable`, Bind-Modell, Enum)
+- `MyChat.Abstractions`: gemeinsame API (`IMyChatBindable`, Bind-Modell, UI- und Sync-Enums)
 - `MyChat.Factory`: zentraler Einstieg via `MyChatControlFactory`
-- `MyChat.Host.WinForms`: Demo-Host, der alle Varianten laden kann
+- `MyChat.Host.WinForms`: Demo-Host mit Rollenprofilen und Sync-Optionen
+- `MyChat.Sync.Service`: Sync-Backend für den Spike (API Polling, SignalR, SSE)
+- `MyChat.Startup.Console`: Startprojekt, das Service + 2 Host-Instanzen orchestriert
+
+## Neuer Realtime-Sync-Spike
+
+Das Startup-Projekt führt einen kleinen Validierungs-Spike aus:
+
+1. Konsole starten (`MyChat.Startup.Console`)
+2. Per Eingabe `1`, `2` oder `3` Sync-Technologie wählen
+3. Es werden automatisch gestartet:
+   - `MyChat.Sync.Service`
+   - `MyChat.Host.WinForms` als `Supporter`
+   - `MyChat.Host.WinForms` als `Applikationsentwickler`
+
+Die Host-App startet standardmäßig in der WebView2-Variante. Neben der UI-Technologie gibt es CheckBoxen für die aktive Realtime-Synchronisation:
+
+- **API Polling** (`/api/messages`)
+- **SignalR** (`/hubs/chat`)
+- **Server Sent Events (SSE)** (`/api/messages/stream`)
+
+Der Spike synchronisiert zunächst nur **Textnachrichten**.
 
 ## Beispielnutzung
 
@@ -51,4 +72,4 @@ MyChatControlFactory.ResetCustomWebView2Component();
 ## Hinweise
 
 - Für `MyChat.WebView` wird das NuGet-Paket `Microsoft.Web.WebView2` benötigt.
-- Das Demo-Form erlaubt den direkten Technologie-Wechsel über drei Checkboxen (WinForms, WPF, WebView2) sowie das Hinzufügen von Nachrichten über zwei Eingabefelder und Buttons ("from me" / "from someone else").
+- Für SignalR im Host wird `Microsoft.AspNetCore.SignalR.Client` verwendet.
