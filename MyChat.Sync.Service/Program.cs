@@ -13,9 +13,9 @@ var app = builder.Build();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapGet("/api/messages", (SyncMessageStore store, long? sinceId) =>
+app.MapGet("/api/messages", (SyncMessageStore store, long? sinceId, string? channel) =>
 {
-    var messages = store.GetSince(sinceId ?? 0L);
+    var messages = store.GetSince(sinceId ?? 0L, channel ?? SyncMessageStore.DefaultChannel);
     return Results.Ok(messages);
 });
 
@@ -82,12 +82,14 @@ public sealed class SyncMessageStore
         return saved;
     }
 
-    public IReadOnlyList<ChatSyncMessage> GetSince(long sinceId)
+    public IReadOnlyList<ChatSyncMessage> GetSince(long sinceId, string channel)
     {
+        var selectedChannel = string.IsNullOrWhiteSpace(channel) ? DefaultChannel : channel;
+
         lock (_gate)
         {
             return _messages
-                .Where(x => x.Id > sinceId)
+                .Where(x => x.Id > sinceId && x.Channel == selectedChannel)
                 .Select(Clone)
                 .ToList();
         }

@@ -28,10 +28,10 @@ internal sealed class ApiPollingChatSyncClient(HttpClient httpClient, string cha
         {
             try
             {
-                var messages = await httpClient.GetFromJsonAsync<List<ChatSyncMessageDto>>($"api/messages?sinceId={_lastSeenId}", cancellationToken)
+                var messages = await httpClient.GetFromJsonAsync<List<ChatSyncMessageDto>>($"api/messages?sinceId={_lastSeenId}&channel={Uri.EscapeDataString(channel)}", cancellationToken)
                     ?? [];
 
-                foreach (var message in messages.Where(m => m.Channel == channel && m.Id > _lastSeenId).OrderBy(m => m.Id))
+                foreach (var message in messages.Where(m => m.Id > _lastSeenId).OrderBy(m => m.Id))
                 {
                     _lastSeenId = message.Id;
                     MessageReceived?.Invoke(this, message);
@@ -42,7 +42,7 @@ internal sealed class ApiPollingChatSyncClient(HttpClient httpClient, string cha
                 // Spike: Fehler werden bewusst toleriert.
             }
 
-            await Task.Delay(400, cancellationToken);
+            await Task.Delay(1200, cancellationToken);
         }
     }
 
