@@ -24,30 +24,53 @@ internal sealed class SseChatSyncClient(HttpClient httpClient, string channel) :
 
     private async Task ListenLoopAsync(CancellationToken cancellationToken)
     {
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            using var stream = await httpClient.GetStreamAsync($"api/messages/stream?channel={Uri.EscapeDataString(channel)}", cancellationToken);
-            using var reader = new StreamReader(stream);
-
-            while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+            try
             {
-                var line = await reader.ReadLineAsync(cancellationToken);
-                if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: ", StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"api/messages/stream?channel={Uri.EscapeDataString(channel)}");
+                request.Headers.Accept.ParseAdd("text/event-stream");
 
-                var payload = line[6..];
-                var message = JsonSerializer.Deserialize<ChatSyncMessageDto>(payload);
-                if (message is not null && message.Channel == channel)
+                using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var reader = new StreamReader(stream);
+
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    MessageReceived?.Invoke(this, message);
+                    var line = await reader.ReadLineAsync(cancellationToken);
+                    if (line is null)
+                    {
+                        break;
+                    }
+
+                    if (!line.StartsWith("data:", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var payload = line[5..].TrimStart();
+                    if (string.IsNullOrWhiteSpace(payload))
+                    {
+                        continue;
+                    }
+
+                    var message = JsonSerializer.Deserialize<ChatSyncMessageDto>(payload);
+                    if (message is not null && message.Channel == channel)
+                    {
+                        MessageReceived?.Invoke(this, message);
+                    }
                 }
             }
-        }
-        catch
-        {
-            // Spike: Fehler werden bewusst toleriert.
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch
+            {
+                await Task.Delay(500, cancellationToken);
+            }
         }
     }
 
