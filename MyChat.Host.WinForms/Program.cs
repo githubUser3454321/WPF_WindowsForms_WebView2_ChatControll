@@ -14,7 +14,7 @@ internal static class Program
     }
 }
 
-internal sealed class StartupOptions
+public sealed class StartupOptions
 {
     public ChatParticipantRole Role { get; init; } = ChatParticipantRole.Supporter;
 
